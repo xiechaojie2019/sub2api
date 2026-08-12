@@ -51,6 +51,34 @@ func (h *OpenAIGatewayHandler) GrokVideoContent(c *gin.Context) {
 	h.handleGrokMedia(c, service.GrokMediaEndpointVideoContent, c.Param("request_id"))
 }
 
+func grokMediaUsesSubscriptionBilling(group *service.Group, subscription *service.UserSubscription) bool {
+	return group != nil && group.IsSubscriptionType() && subscription != nil
+}
+
+func (h *OpenAIGatewayHandler) ensureGrokVideoGenerationBalance(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, userID int64, requestInfo service.GrokMediaRequestInfo) bool {
+	cost := h.gatewayService.EstimateGrokVideoGenerationCost(c.Request.Context(), apiKey, userID, requestInfo)
+	if cost == nil || cost.ActualCost <= 0 {
+		return true
+	}
+	balance, err := h.billingCacheService.GetUserBalance(c.Request.Context(), userID)
+	if err != nil {
+		if reqLog != nil {
+			reqLog.Info("grok_media.video_balance_check_failed", zap.Error(err))
+		}
+		status, code, message, _ := billingErrorDetails(service.ErrBillingServiceUnavailable.WithCause(err))
+		h.errorResponse(c, status, code, message)
+		return false
+	}
+	if balance < cost.ActualCost {
+		if reqLog != nil {
+			reqLog.Info("grok_media.video_insufficient_balance", zap.Float64("balance", balance), zap.Float64("required_cost", cost.ActualCost))
+		}
+		h.errorResponse(c, http.StatusForbidden, "billing_error", "余额不足")
+		return false
+	}
+	return true
+}
+
 func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.GrokMediaEndpoint, requestID string) {
 	streamStarted := false
 	defer h.recoverResponsesPanic(c, &streamStarted)
@@ -158,6 +186,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 		h.errorResponse(c, status, code, message)
 		return
+	}
+	if endpoint == service.GrokMediaEndpointVideosGenerations && !grokMediaUsesSubscriptionBilling(apiKey.Group, subscription) {
+		if !h.ensureGrokVideoGenerationBalance(c, reqLog, apiKey, subject.UserID, requestInfo) {
+			return
+		}
 	}
 
 	sessionSeed := body
