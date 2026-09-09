@@ -89,14 +89,27 @@ func NewCNProviderQuotaService(
 // QueryUsage 探测指定账号的 Coding Plan 滚动窗口用量并落 Extra 快照。
 // 同一账号的并发探测会被 singleflight 合并。
 func (s *CNProviderQuotaService) QueryUsage(ctx context.Context, accountID int64) (*CNProviderQuotaProbeResult, error) {
+	account, err := s.loadCodingPlanAccount(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return s.QueryUsageForAccount(ctx, account)
+}
+
+// QueryUsageForAccount 探测已加载账号（配额监控 fetcher 复用，避免二次 GetByID）。
+// singleflight key 与 QueryUsage 相同，按账号 ID 与 admin 侧并发探测合并。
+func (s *CNProviderQuotaService) QueryUsageForAccount(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	if s == nil || s.accountRepo == nil || s.httpUpstream == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "CN_QUOTA_NOT_CONFIGURED", "cn provider quota service is not configured")
 	}
-	key := "cn_quota:" + strconv.FormatInt(accountID, 10)
+	if err := validateCodingPlanAccount(account); err != nil {
+		return nil, err
+	}
+	key := "cn_quota:" + strconv.FormatInt(account.ID, 10)
 	resultCh := s.flight.DoChan(key, func() (any, error) {
 		probeCtx, cancel := context.WithTimeout(context.Background(), cnQuotaUpstreamTimeout+5*time.Second)
 		defer cancel()
-		return s.queryUsage(probeCtx, accountID)
+		return s.queryUsageForAccount(probeCtx, account)
 	})
 	select {
 	case <-ctx.Done():
@@ -114,15 +127,10 @@ func (s *CNProviderQuotaService) QueryUsage(ctx context.Context, accountID int64
 	}
 }
 
-func (s *CNProviderQuotaService) queryUsage(ctx context.Context, accountID int64) (*CNProviderQuotaProbeResult, error) {
-	account, err := s.loadCodingPlanAccount(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-
+func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	provider := account.GetCodingPlanProvider()
-	if provider != PlatformKimi && provider != PlatformZhipu {
-		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NOT_CODING_PLAN", "account is not a kimi/zhipu coding plan account")
+	if provider != PlatformKimi && provider != PlatformZhipu && provider != PlatformMiniMax {
+		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NOT_CODING_PLAN", "account is not a kimi/zhipu/minimax coding plan account")
 	}
 
 	apiKey := strings.TrimSpace(account.GetCNAPIKey())
@@ -134,6 +142,7 @@ func (s *CNProviderQuotaService) queryUsage(ctx context.Context, accountID int64
 	var (
 		targetURL  string
 		authHeader string
+		zhipuOrg   string
 	)
 	switch provider {
 	case PlatformKimi:
@@ -142,6 +151,16 @@ func (s *CNProviderQuotaService) queryUsage(ctx context.Context, accountID int64
 	case PlatformZhipu:
 		targetURL = zhipuQuotaURL(baseURL)
 		authHeader = apiKey // 智谱额度端点鉴权不加 Bearer 前缀
+		// 团队版 GLM Coding Plan：额度端点需 ?type=2 + 组织/项目请求头，
+		// 否则官方 API 回「当前用户不存在coding plan」。组织 ID 存在即视为
+		// 团队版（个人版凭据不含该字段，走原个人版查询路径）。
+		zhipuOrg = strings.TrimSpace(account.GetCredential("zhipu_organization"))
+		if zhipuOrg != "" {
+			targetURL += "?type=2"
+		}
+	case PlatformMiniMax:
+		targetURL = minimaxQuotaURL(baseURL)
+		authHeader = "Bearer " + apiKey
 	}
 
 	// 探测发起前过出站 URL 安全策略（与网关转发/Grok 探测同一套校验）：
@@ -161,9 +180,15 @@ func (s *CNProviderQuotaService) queryUsage(ctx context.Context, accountID int64
 	}
 	req.Header.Set("Authorization", authHeader)
 	req.Header.Set("Accept", "application/json")
-	if provider == PlatformZhipu {
+	if provider == PlatformZhipu || provider == PlatformMiniMax {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept-Language", "en-US,en")
+		if zhipuOrg != "" {
+			req.Header.Set("bigmodel-organization", zhipuOrg)
+			if project := strings.TrimSpace(account.GetCredential("zhipu_project")); project != "" {
+				req.Header.Set("bigmodel-project", project)
+			}
+		}
 	}
 	// 探测与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
 	account.ApplyHeaderOverrides(req.Header)
@@ -212,6 +237,17 @@ func (s *CNProviderQuotaService) queryUsage(ctx context.Context, accountID int64
 	case PlatformZhipu:
 		tiers = parseZhipuTokenTiers(gjson.GetBytes(bodyBytes, "data"))
 		result.PlanLevel = strings.TrimSpace(gjson.GetBytes(bodyBytes, "data.level").String())
+	case PlatformMiniMax:
+		if status := gjson.GetBytes(bodyBytes, "base_resp.status_code"); status.Exists() && status.Int() != 0 {
+			msg := strings.TrimSpace(gjson.GetBytes(bodyBytes, "base_resp.status_msg").String())
+			if msg == "" {
+				msg = "unknown minimax quota error"
+			}
+			result.Error = fmt.Sprintf("API error (%d): %s", status.Int(), msg)
+			return result, nil
+		}
+		tiers = parseMiniMaxUsageTiers(bodyBytes)
+		result.PlanLevel = strings.TrimSpace(gjson.GetBytes(bodyBytes, "current_subscribe_title").String())
 	}
 	result.Tiers = tiers
 	result.Success = true
@@ -231,16 +267,25 @@ func (s *CNProviderQuotaService) loadCodingPlanAccount(ctx context.Context, acco
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusNotFound, "CN_QUOTA_ACCOUNT_NOT_FOUND", "account not found: %v", err)
 	}
-	if account == nil {
-		return nil, infraerrors.New(http.StatusNotFound, "CN_QUOTA_ACCOUNT_NOT_FOUND", "account not found")
-	}
-	if !account.IsCNProvider() {
-		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_INVALID_PLATFORM", "account is not a CN provider account")
-	}
-	if !account.IsCodingPlan() {
-		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NOT_CODING_PLAN", "account is not a coding plan account")
+	if err := validateCodingPlanAccount(account); err != nil {
+		return nil, err
 	}
 	return account, nil
+}
+
+// validateCodingPlanAccount 加载后的非 DB 校验（ForAccount 入口同样复用，
+// 保证直传 account 也不绕过平台/模式检查）。
+func validateCodingPlanAccount(account *Account) error {
+	if account == nil {
+		return infraerrors.New(http.StatusNotFound, "CN_QUOTA_ACCOUNT_NOT_FOUND", "account not found")
+	}
+	if !account.IsCNProvider() {
+		return infraerrors.New(http.StatusBadRequest, "CN_QUOTA_INVALID_PLATFORM", "account is not a CN provider account")
+	}
+	if !account.IsCodingPlan() {
+		return infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NOT_CODING_PLAN", "account is not a coding plan account")
+	}
+	return nil
 }
 
 func (s *CNProviderQuotaService) resolveProxyURL(ctx context.Context, account *Account) string {
@@ -272,6 +317,16 @@ func zhipuQuotaURL(baseURL string) string {
 func kimiQuotaURL(baseURL string) string {
 	base := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1")
 	return base + "/v1/usages"
+}
+
+// minimaxQuotaURL 根据推理域名选择 Token Plan / Coding Plan 额度主机。
+// 官方 FAQ 写 www.minimax.io / www.minimaxi.com，实际以 Bearer Key 打 api.*。
+// 国际站 api.minimax.io；国内站 api.minimaxi.com（含 api.minimax.com 与自定义回落）。
+func minimaxQuotaURL(baseURL string) string {
+	if strings.Contains(strings.ToLower(baseURL), "minimax.io") {
+		return "https://api.minimax.io/v1/api/openplatform/coding_plan/remains"
+	}
+	return "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains"
 }
 
 func zhipuQuotaHost(baseURL string) string {
@@ -339,6 +394,71 @@ func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 	}
 
 	return tiers
+}
+
+// parseMiniMaxUsageTiers 解析 MiniMax Token Plan / Coding Plan remains 响应。
+//
+// 只取 model_name == "general"（编程套餐），跳过 video。字段是剩余百分比，
+// 展示已用 = 100 - remaining：
+//   - 5h：current_interval_remaining_percent + end_time
+//   - 周限额：仅 current_weekly_status == 1 时用 current_weekly_remaining_percent + weekly_end_time
+func parseMiniMaxUsageTiers(body []byte) []CNQuotaTier {
+	remains := gjson.GetBytes(body, "model_remains")
+	if !remains.IsArray() {
+		return nil
+	}
+	var general gjson.Result
+	remains.ForEach(func(_, item gjson.Result) bool {
+		if strings.EqualFold(strings.TrimSpace(item.Get("model_name").String()), "general") {
+			general = item
+			return false
+		}
+		return true
+	})
+	if !general.Exists() {
+		return nil
+	}
+
+	var tiers []CNQuotaTier
+	if remaining, ok := cnParseF64(general.Get("current_interval_remaining_percent").Value()); ok {
+		used := 100 - remaining
+		if used < 0 {
+			used = 0
+		}
+		tiers = append(tiers, CNQuotaTier{
+			Window:      "5h",
+			UsedPercent: used,
+			ResetAt:     minimaxResetTime(general.Get("end_time")),
+		})
+	}
+	if general.Get("current_weekly_status").Int() == 1 {
+		if remaining, ok := cnParseF64(general.Get("current_weekly_remaining_percent").Value()); ok {
+			used := 100 - remaining
+			if used < 0 {
+				used = 0
+			}
+			tiers = append(tiers, CNQuotaTier{
+				Window:      "weekly",
+				UsedPercent: used,
+				ResetAt:     minimaxResetTime(general.Get("weekly_end_time")),
+			})
+		}
+	}
+	return tiers
+}
+
+func minimaxResetTime(v gjson.Result) string {
+	if !v.Exists() {
+		return ""
+	}
+	ms := v.Int()
+	if ms <= 0 {
+		return cnNormalizeResetTime(v.Value())
+	}
+	if ms < 1_000_000_000_000 {
+		return time.Unix(ms, 0).UTC().Format(time.RFC3339)
+	}
+	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
 }
 
 // cnZhipuWindow 标识智谱 TOKENS_LIMIT 条目所属窗口。
