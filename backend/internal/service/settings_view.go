@@ -78,6 +78,7 @@ type SystemSettings struct {
 	DingTalkConnectCorpRestrictionPolicy   string
 	DingTalkConnectInternalCorpID          string
 	DingTalkConnectBypassRegistration      bool
+	DingTalkConnectAutoProvision           bool
 	DingTalkConnectSyncCorpEmail           bool
 	DingTalkConnectSyncDisplayName         bool
 	DingTalkConnectSyncDept                bool

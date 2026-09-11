@@ -514,6 +514,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.DingTalkConnectBypassRegistration = false
 	}
 
+	// auto_provision 与 corp 策略解耦：任何策略下都可用于"扫码即建号直登"。
+	if v, ok := settings[SettingKeyDingTalkConnectAutoProvision]; ok && strings.TrimSpace(v) != "" {
+		result.DingTalkConnectAutoProvision = strings.EqualFold(strings.TrimSpace(v), "true")
+	} else {
+		result.DingTalkConnectAutoProvision = dingTalkBase.AutoProvision
+	}
+
 	if v, ok := settings[SettingKeyDingTalkConnectSyncCorpEmail]; ok && strings.TrimSpace(v) != "" {
 		result.DingTalkConnectSyncCorpEmail = strings.EqualFold(strings.TrimSpace(v), "true")
 	} else {

@@ -130,11 +130,12 @@ func (c *DingTalkClient) GetUnionIdByUserToken(ctx context.Context, userToken st
 }
 
 type DingTalkStaffInfo struct {
-	UserID   string
-	Name     string // 企业内真实姓名（钉钉企业管理后台配置）
-	Nickname string // 钉钉个人昵称（用户自己设置）
-	Email    string
-	DeptIDs  []int64
+	UserID    string
+	Name      string // 企业内真实姓名（钉钉企业管理后台配置）
+	Nickname  string // 钉钉个人昵称（用户自己设置）
+	Email     string
+	JobNumber string // 钉钉企业通讯录「工号」字段，用于自动建号时拼接邮箱
+	DeptIDs   []int64
 	// CorpID 不来自 staff 接口，来自 userToken；不在此 struct
 }
 
@@ -340,6 +341,7 @@ func (c *DingTalkClient) GetStaffInfoByUserId(ctx context.Context, userID string
 			Nickname  string  `json:"nickname"`
 			Email     string  `json:"email"`
 			OrgEmail  string  `json:"org_email"`
+			JobNumber string  `json:"job_number"`
 			Extension string  `json:"extension"`
 			DeptID    []int64 `json:"dept_id_list"`
 		} `json:"result"`
@@ -389,10 +391,11 @@ func (c *DingTalkClient) GetStaffInfoByUserId(ctx context.Context, userID string
 		"dept_count", len(v.Result.DeptID),
 	)
 	return &DingTalkStaffInfo{
-		UserID:   v.Result.UserID,
-		Name:     v.Result.Name,
-		Nickname: v.Result.Nickname,
-		Email:    email,
-		DeptIDs:  v.Result.DeptID,
+		UserID:    v.Result.UserID,
+		Name:      v.Result.Name,
+		Nickname:  v.Result.Nickname,
+		Email:     email,
+		JobNumber: strings.TrimSpace(v.Result.JobNumber),
+		DeptIDs:   v.Result.DeptID,
 	}, nil
 }

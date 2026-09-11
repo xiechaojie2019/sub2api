@@ -185,6 +185,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.DingTalkConnectBypassRegistration != after.DingTalkConnectBypassRegistration {
 		changed = append(changed, "dingtalk_connect_bypass_registration")
 	}
+	if before.DingTalkConnectAutoProvision != after.DingTalkConnectAutoProvision {
+		changed = append(changed, "dingtalk_connect_auto_provision")
+	}
 	if before.DingTalkConnectSyncCorpEmail != after.DingTalkConnectSyncCorpEmail {
 		changed = append(changed, "dingtalk_connect_sync_corp_email")
 	}

@@ -577,6 +577,7 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 		SettingKeyDingTalkConnectCorpRestrictionPolicy,
 		SettingKeyDingTalkConnectInternalCorpID,
 		SettingKeyDingTalkConnectBypassRegistration,
+		SettingKeyDingTalkConnectAutoProvision,
 		SettingKeyDingTalkConnectSyncCorpEmail,
 		SettingKeyDingTalkConnectSyncDisplayName,
 		SettingKeyDingTalkConnectSyncDept,
@@ -610,6 +611,10 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 	}
 	if v, ok := settings[SettingKeyDingTalkConnectBypassRegistration]; ok && strings.TrimSpace(v) != "" {
 		effective.BypassRegistration = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	// auto_provision 与 corp 策略解耦：任何策略下都可用于"扫码即建号直登"。
+	if v, ok := settings[SettingKeyDingTalkConnectAutoProvision]; ok && strings.TrimSpace(v) != "" {
+		effective.AutoProvision = strings.EqualFold(strings.TrimSpace(v), "true")
 	}
 	// bypass_registration 仅在 internal_only 模式下有意义；其它策略下强制 false，
 	// 以保证 OAuth callback 看到的 effective config 永远是一致状态。

@@ -389,3 +389,51 @@ func TestResolveDingTalkDeptPath_MultiLevel(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "研发部/AI研发", path)
 }
+
+// ─── auto_provision（扫码自动建号）──────────────────────────────────────────
+
+// TestDingTalkAutoProvisionEmail_PrefersStaffEmail 验证优先使用钉钉返回的真实邮箱。
+func TestDingTalkAutoProvisionEmail_PrefersStaffEmail(t *testing.T) {
+	staff := &DingTalkStaffInfo{Email: "ZhangSan@Corp.com", JobNumber: "A001"}
+
+	require.Equal(t, "zhangsan@corp.com", dingTalkAutoProvisionEmail(staff))
+}
+
+// TestDingTalkAutoProvisionEmail_FallsBackToJobNumber 验证无邮箱时退回「工号@域名」。
+func TestDingTalkAutoProvisionEmail_FallsBackToJobNumber(t *testing.T) {
+	staff := &DingTalkStaffInfo{JobNumber: "A001"}
+
+	require.Equal(t, "a001@"+dingTalkAutoProvisionEmailDomain, dingTalkAutoProvisionEmail(staff))
+}
+
+// TestDingTalkAutoProvisionEmail_NoUsableSeed 验证拿不到可用邮箱种子时返回空串（调用方放弃自动建号）。
+func TestDingTalkAutoProvisionEmail_NoUsableSeed(t *testing.T) {
+	require.Equal(t, "", dingTalkAutoProvisionEmail(&DingTalkStaffInfo{}))
+	require.Equal(t, "", dingTalkAutoProvisionEmail(nil))
+	// 工号全是不合法字符 → 清洗后为空
+	require.Equal(t, "", dingTalkAutoProvisionEmail(&DingTalkStaffInfo{JobNumber: "工号：壹"}))
+}
+
+// TestSanitizeDingTalkEmailLocalPart 验证工号清洗规则。
+func TestSanitizeDingTalkEmailLocalPart(t *testing.T) {
+	cases := map[string]string{
+		"A001":      "A001",
+		"  A001  ":  "A001",
+		"A-001_2.3": "A-001_2.3",
+		"工号 A001":   "A001",
+		"..A001..":  "A001",
+		"":          "",
+		"---":       "",
+	}
+	for input, want := range cases {
+		require.Equal(t, want, sanitizeDingTalkEmailLocalPart(input), "input=%q", input)
+	}
+}
+
+// TestDingTalkAutoProvisionPassword 验证初始密码取邮箱 @ 前面部分。
+func TestDingTalkAutoProvisionPassword(t *testing.T) {
+	require.Equal(t, "zhangsan", dingTalkAutoProvisionPassword("zhangsan@corp.com"))
+	require.Equal(t, "a001", dingTalkAutoProvisionPassword("a001@fjdaze.com"))
+	require.Equal(t, "", dingTalkAutoProvisionPassword(""))
+	require.Equal(t, "", dingTalkAutoProvisionPassword("@corp.com"))
+}

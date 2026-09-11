@@ -529,6 +529,7 @@ export interface SystemSettings {
   dingtalk_connect_corp_restriction_policy: string;
   dingtalk_connect_internal_corp_id: string;
   dingtalk_connect_bypass_registration: boolean;
+  dingtalk_connect_auto_provision: boolean;
   dingtalk_connect_sync_corp_email: boolean;
   dingtalk_connect_sync_display_name: boolean;
   dingtalk_connect_sync_dept: boolean;
@@ -864,6 +865,7 @@ export interface UpdateSettingsRequest {
   dingtalk_connect_corp_restriction_policy?: string;
   dingtalk_connect_internal_corp_id?: string;
   dingtalk_connect_bypass_registration?: boolean;
+  dingtalk_connect_auto_provision?: boolean;
   dingtalk_connect_sync_corp_email?: boolean;
   dingtalk_connect_sync_display_name?: boolean;
   dingtalk_connect_sync_dept?: boolean;

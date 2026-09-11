@@ -288,6 +288,7 @@ const (
 	SettingKeyDingTalkConnectCorpRestrictionPolicy   = "dingtalk_connect_corp_restriction_policy"
 	SettingKeyDingTalkConnectInternalCorpID          = "dingtalk_connect_internal_corp_id"
 	SettingKeyDingTalkConnectBypassRegistration      = "dingtalk_connect_bypass_registration"
+	SettingKeyDingTalkConnectAutoProvision           = "dingtalk_connect_auto_provision"
 	SettingKeyDingTalkConnectSyncCorpEmail           = "dingtalk_connect_sync_corp_email"
 	SettingKeyDingTalkConnectSyncDisplayName         = "dingtalk_connect_sync_display_name"
 	SettingKeyDingTalkConnectSyncDept                = "dingtalk_connect_sync_dept"

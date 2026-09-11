@@ -390,6 +390,7 @@ type DingTalkConnectConfig struct {
 
 	// 邮箱 + Username
 	RequireEmail            bool   `mapstructure:"require_email"`
+	AutoProvision           bool   `mapstructure:"auto_provision"` // 钉钉扫码且用户不存在时自动建号并直接登录
 	UsernameOverwritePolicy string `mapstructure:"username_overwrite_policy"`
 
 	// Attribute（私有版扩展点；开源版仅声明）

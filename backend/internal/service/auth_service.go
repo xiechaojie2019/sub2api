@@ -682,17 +682,24 @@ func (s *AuthService) canBypassRegistrationDisabledForOAuth(ctx context.Context,
 // affiliateCode 用于邀请返利绑定，仅在新用户注册时使用。
 // signupSource 标识来源渠道（"dingtalk"/"linuxdo"/"wechat"/"oidc" 等），仅用于豁免检查。
 func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, email, username, invitationCode, affiliateCode, signupSource string) (*TokenPair, *User, error) {
-	return s.loginOrRegisterOAuthWithTokenPair(ctx, email, username, invitationCode, affiliateCode, "", signupSource)
+	return s.loginOrRegisterOAuthWithTokenPair(ctx, email, username, invitationCode, affiliateCode, "", signupSource, "")
+}
+
+// LoginOrRegisterOAuthWithTokenPairAndPassword 与 LoginOrRegisterOAuthWithTokenPair 行为一致，
+// 唯一区别：新用户注册时使用调用方指定的密码，而不是随机密码。
+// 用于钉钉扫码"自动建号直登"场景（密码取邮箱 @ 前面部分），已有账号登录时该参数被忽略。
+func (s *AuthService) LoginOrRegisterOAuthWithTokenPairAndPassword(ctx context.Context, email, username, password, invitationCode, affiliateCode, promoCode, signupSource string) (*TokenPair, *User, error) {
+	return s.loginOrRegisterOAuthWithTokenPair(ctx, email, username, invitationCode, affiliateCode, promoCode, signupSource, password)
 }
 
 // LoginOrRegisterOAuthWithTokenPairAndPromoCode behaves like
 // LoginOrRegisterOAuthWithTokenPair and applies promoCode only when a new user
 // is created.
 func (s *AuthService) LoginOrRegisterOAuthWithTokenPairAndPromoCode(ctx context.Context, email, username, invitationCode, affiliateCode, promoCode, signupSource string) (*TokenPair, *User, error) {
-	return s.loginOrRegisterOAuthWithTokenPair(ctx, email, username, invitationCode, affiliateCode, promoCode, signupSource)
+	return s.loginOrRegisterOAuthWithTokenPair(ctx, email, username, invitationCode, affiliateCode, promoCode, signupSource, "")
 }
 
-func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, email, username, invitationCode, affiliateCode, promoCode, signupSource string) (*TokenPair, *User, error) {
+func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, email, username, invitationCode, affiliateCode, promoCode, signupSource, passwordOverride string) (*TokenPair, *User, error) {
 	// 检查 refreshTokenCache 是否可用
 	if s.refreshTokenCache == nil {
 		return nil, nil, errors.New("refresh token cache not configured")
@@ -736,12 +743,18 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				invitationRedeemCode = redeemCode
 			}
 
-			randomPassword, err := randomHexString(32)
-			if err != nil {
-				logger.LegacyPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", err)
-				return nil, nil, ErrServiceUnavailable
+			// passwordOverride 非空时使用调用方指定密码（钉钉扫码自动建号：邮箱 @ 前部分）；
+			// 为空则沿用随机密码——用户本来只走 OAuth 登录，随机密码不可用也无妨。
+			signupPassword := strings.TrimSpace(passwordOverride)
+			if signupPassword == "" {
+				generated, genErr := randomHexString(32)
+				if genErr != nil {
+					logger.LegacyPrintf("service.auth", "[Auth] Failed to generate random password for oauth signup: %v", genErr)
+					return nil, nil, ErrServiceUnavailable
+				}
+				signupPassword = generated
 			}
-			hashedPassword, err := s.HashPassword(randomPassword)
+			hashedPassword, err := s.HashPassword(signupPassword)
 			if err != nil {
 				return nil, nil, fmt.Errorf("hash password: %w", err)
 			}

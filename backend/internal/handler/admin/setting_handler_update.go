@@ -89,6 +89,7 @@ type UpdateSettingsRequest struct {
 	DingTalkConnectCorpRestrictionPolicy   string `json:"dingtalk_connect_corp_restriction_policy"`
 	DingTalkConnectInternalCorpID          string `json:"dingtalk_connect_internal_corp_id"`
 	DingTalkConnectBypassRegistration      bool   `json:"dingtalk_connect_bypass_registration"`
+	DingTalkConnectAutoProvision           bool   `json:"dingtalk_connect_auto_provision"`
 	DingTalkConnectSyncCorpEmail           bool   `json:"dingtalk_connect_sync_corp_email"`
 	DingTalkConnectSyncDisplayName         bool   `json:"dingtalk_connect_sync_display_name"`
 	DingTalkConnectSyncDept                bool   `json:"dingtalk_connect_sync_dept"`
@@ -1557,6 +1558,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectCorpRestrictionPolicy:   req.DingTalkConnectCorpRestrictionPolicy,
 		DingTalkConnectInternalCorpID:          req.DingTalkConnectInternalCorpID,
 		DingTalkConnectBypassRegistration:      req.DingTalkConnectBypassRegistration,
+		DingTalkConnectAutoProvision:           req.DingTalkConnectAutoProvision,
 		DingTalkConnectSyncCorpEmail:           req.DingTalkConnectSyncCorpEmail,
 		DingTalkConnectSyncDisplayName:         req.DingTalkConnectSyncDisplayName,
 		DingTalkConnectSyncDept:                req.DingTalkConnectSyncDept,
@@ -2191,6 +2193,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectCorpRestrictionPolicy:                   updatedSettings.DingTalkConnectCorpRestrictionPolicy,
 		DingTalkConnectInternalCorpID:                          updatedSettings.DingTalkConnectInternalCorpID,
 		DingTalkConnectBypassRegistration:                      updatedSettings.DingTalkConnectBypassRegistration,
+		DingTalkConnectAutoProvision:                           updatedSettings.DingTalkConnectAutoProvision,
 		DingTalkConnectSyncCorpEmail:                           updatedSettings.DingTalkConnectSyncCorpEmail,
 		DingTalkConnectSyncDisplayName:                         updatedSettings.DingTalkConnectSyncDisplayName,
 		DingTalkConnectSyncDept:                                updatedSettings.DingTalkConnectSyncDept,

@@ -3269,6 +3269,21 @@
                     <Toggle v-model="form.dingtalk_connect_bypass_registration" />
                   </div>
 
+                  <!-- auto_provision toggle（与 corp 策略解耦，任何模式下都可见可用） -->
+                  <div
+                    class="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-dark-700"
+                  >
+                    <div>
+                      <label class="font-medium text-gray-900 dark:text-white">{{
+                        t("admin.settings.dingtalk.autoProvision")
+                      }}</label>
+                      <p class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ t("admin.settings.dingtalk.autoProvisionHint") }}
+                      </p>
+                    </div>
+                    <Toggle v-model="form.dingtalk_connect_auto_provision" />
+                  </div>
+
                   <!-- 身份同步开关（仅 internal_only 模式下可见） -->
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
@@ -9682,6 +9697,7 @@ const form = reactive<SettingsForm>({
   dingtalk_connect_corp_restriction_policy: "none",
   dingtalk_connect_internal_corp_id: "",
   dingtalk_connect_bypass_registration: false,
+  dingtalk_connect_auto_provision: false,
   dingtalk_connect_sync_corp_email: false,
   dingtalk_connect_sync_display_name: false,
   dingtalk_connect_sync_dept: false,
@@ -11277,6 +11293,7 @@ async function saveSettings() {
         form.dingtalk_connect_corp_restriction_policy,
       dingtalk_connect_internal_corp_id: form.dingtalk_connect_internal_corp_id,
       dingtalk_connect_bypass_registration: form.dingtalk_connect_bypass_registration,
+      dingtalk_connect_auto_provision: form.dingtalk_connect_auto_provision,
       dingtalk_connect_sync_corp_email: form.dingtalk_connect_sync_corp_email,
       dingtalk_connect_sync_display_name: form.dingtalk_connect_sync_display_name,
       dingtalk_connect_sync_dept: form.dingtalk_connect_sync_dept,

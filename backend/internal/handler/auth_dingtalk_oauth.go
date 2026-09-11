@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -461,6 +462,23 @@ func (h *AuthHandler) DingTalkOAuthCallback(c *gin.Context) {
 
 	signupBlocked := h.isDingTalkSignupBlocked(c.Request.Context(), cfg)
 
+	// ─── 自动建号直登（auto_provision）───
+	// 开关开启且该钉钉身份未绑定时：用钉钉邮箱（缺失则「工号@域名」）直接建号并登录，
+	// 跳过"补邮箱 / 选择账户"交互。拿不到邮箱或邮箱已被占用时交回原有流程，不静默接管。
+	if cfg.AutoProvision && !signupBlocked {
+		handled, provisionErr := h.tryDingTalkAutoProvision(
+			c, cfg, identityKey, staff, redirectTo, browserSessionKey, upstreamClaims,
+		)
+		if provisionErr != nil {
+			redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(provisionErr), infraerrors.Message(provisionErr))
+			return
+		}
+		if handled {
+			redirectToFrontendCallback(c, frontendCallback)
+			return
+		}
+	}
+
 	// ─── 非命中：require_email=false 走 synthetic email 直接登录 ───
 	if !cfg.RequireEmail {
 		if signupBlocked {
@@ -536,6 +554,138 @@ func buildDingTalkSyntheticEmail(userID string) string {
 	return "dingtalk-" + strings.ToLower(strings.TrimSpace(userID)) + service.DingTalkConnectSyntheticEmailDomain
 }
 
+// ─── 自动建号（auto_provision）──────────────────────────────────────────────
+
+// dingTalkAutoProvisionEmailDomain 是自动建号时「工号 + 域名」所用的域名。
+// 钉钉未返回任何邮箱时，用 工号@该域名 生成登录邮箱。
+const dingTalkAutoProvisionEmailDomain = "fjdaze.com"
+
+// dingTalkAutoProvisionEmail 解析自动建号使用的邮箱。
+// 优先用钉钉返回的真实邮箱（staff.Email 已含 org_email/email/扩展字段三级 fallback）；
+// 没有邮箱时退回「工号@域名」；两者都拿不到返回空串（调用方据此放弃自动建号）。
+func dingTalkAutoProvisionEmail(staff *DingTalkStaffInfo) string {
+	if staff == nil {
+		return ""
+	}
+	if email := strings.TrimSpace(staff.Email); email != "" {
+		return strings.ToLower(email)
+	}
+	local := sanitizeDingTalkEmailLocalPart(staff.JobNumber)
+	if local == "" {
+		return ""
+	}
+	return strings.ToLower(local + "@" + dingTalkAutoProvisionEmailDomain)
+}
+
+// sanitizeDingTalkEmailLocalPart 把钉钉工号清洗成可安全放入邮箱 local part 的字符串。
+// 只保留字母/数字/点/下划线/连字符（中文、空格等一律剔除），并去掉首尾的分隔符。
+func sanitizeDingTalkEmailLocalPart(raw string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(raw) {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '.', r == '_', r == '-':
+			b.WriteRune(r)
+		}
+	}
+	return strings.Trim(b.String(), ".-_")
+}
+
+// dingTalkAutoProvisionPassword 取邮箱 @ 前面部分作为初始密码。
+func dingTalkAutoProvisionPassword(email string) string {
+	at := strings.Index(email, "@")
+	if at <= 0 {
+		return ""
+	}
+	return email[:at]
+}
+
+// tryDingTalkAutoProvision 在钉钉扫码回调中直接建号并登录。
+//
+// handled=true 表示已创建 pending session 且 TargetUserID 就绪：调用方跳转前端 callback，
+// 前端通过 /oauth/pending/exchange 换取 token 即完成登录（与"已绑定用户"分支同形）。
+// handled=false 表示不满足自动建号条件（拿不到邮箱 / 邮箱已被占用），交回原有流程。
+func (h *AuthHandler) tryDingTalkAutoProvision(
+	c *gin.Context,
+	cfg config.DingTalkConnectConfig,
+	identityKey service.PendingAuthIdentityKey,
+	staff *DingTalkStaffInfo,
+	redirectTo string,
+	browserSessionKey string,
+	upstreamClaims map[string]any,
+) (bool, error) {
+	email := dingTalkAutoProvisionEmail(staff)
+	if email == "" {
+		// 钉钉既没给邮箱也没有可用工号：不硬造账号，退回补邮箱页。
+		slog.Info("dingtalk auto provision: no usable email, fallback to manual flow",
+			"has_staff_email", staff != nil && strings.TrimSpace(staff.Email) != "",
+			"has_job_number", staff != nil && strings.TrimSpace(staff.JobNumber) != "")
+		return false, nil
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		slog.Warn("dingtalk auto provision: resolved email is invalid", "email", email, "err", err.Error())
+		return false, nil
+	}
+	password := dingTalkAutoProvisionPassword(email)
+	if password == "" {
+		return false, nil
+	}
+
+	client := h.entClient()
+	if client == nil {
+		return false, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
+	}
+
+	// 邮箱已被其它账号占用 → 不自动接管，交回 choice/bind 流程让用户显式确认。
+	existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email)
+	if lookupErr == nil && existingUser != nil {
+		slog.Info("dingtalk auto provision: email already taken, fallback to manual flow", "email", email)
+		return false, nil
+	}
+	if lookupErr != nil && !errors.Is(lookupErr, service.ErrUserNotFound) {
+		return false, lookupErr
+	}
+
+	// username：企业真实姓名 > 钉钉昵称 > 邮箱 @ 前部分
+	username := strings.TrimSpace(staff.Name)
+	if username == "" {
+		username = strings.TrimSpace(staff.Nickname)
+	}
+	if username == "" {
+		username = password
+	}
+
+	_, user, err := h.authService.LoginOrRegisterOAuthWithTokenPairAndPassword(
+		c.Request.Context(), email, username, password, "", "", "", "dingtalk",
+	)
+	if err != nil {
+		return false, err
+	}
+	if user == nil || user.ID <= 0 {
+		return false, infraerrors.InternalServer("DINGTALK_AUTO_PROVISION_FAILED", "failed to provision dingtalk user")
+	}
+
+	if err := h.createOAuthPendingSession(c, oauthPendingSessionPayload{
+		Intent: oauthIntentLogin, Identity: identityKey, TargetUserID: &user.ID,
+		ResolvedEmail: user.Email, RedirectTo: redirectTo, BrowserSessionKey: browserSessionKey,
+		UpstreamIdentityClaims: upstreamClaims,
+		CompletionResponse:     map[string]any{"redirect": redirectTo},
+	}); err != nil {
+		return false, err
+	}
+
+	// 首次建号：把钉钉昵称/姓名写入 users.username，并同步属性表（异步，不阻塞跳转）。
+	runDingTalkSyncAsync(c.Request.Context(), func(ctx context.Context) {
+		h.syncDingTalkIdentity(ctx, cfg, h.dingTalkClient(cfg), user.ID, staff, true)
+	})
+
+	slog.Info("dingtalk auto provision: user provisioned",
+		"user_id", user.ID, "email", email, "job_number_present", strings.TrimSpace(staff.JobNumber) != "")
+	return true, nil
+}
+
 // isDingTalkSignupBlocked 当注册总开关关闭且未开启钉钉企业模式豁免
 // （policy=internal_only + dingtalk_connect_bypass_registration=true）时返回 true。
 // 镜像 service.AuthService.canBypassRegistrationDisabledForOAuth 用于 OAuth callback
@@ -573,6 +723,7 @@ func buildDingTalkUpstreamClaims(staff *DingTalkStaffInfo, unionID, corpID strin
 		"nickname":        staff.Nickname,
 		"subject":         unionID,      // 与 identityKey.ProviderSubject 保持一致（全局唯一 unionID）
 		"corp_user_id":    staff.UserID, // 企业 userid（跨组织时为空），保留作独立字段用于 audit
+		"job_number":      staff.JobNumber,
 		"union_id":        unionID,
 		"corp_id":         corpID,
 		"primary_dept_id": primaryDeptID, // 首个部门 ID，用于 internal_only 同步路径

@@ -189,6 +189,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DingTalkConnectCorpRestrictionPolicy:                   settings.DingTalkConnectCorpRestrictionPolicy,
 		DingTalkConnectInternalCorpID:                          settings.DingTalkConnectInternalCorpID,
 		DingTalkConnectBypassRegistration:                      settings.DingTalkConnectBypassRegistration,
+		DingTalkConnectAutoProvision:                           settings.DingTalkConnectAutoProvision,
 		DingTalkConnectSyncCorpEmail:                           settings.DingTalkConnectSyncCorpEmail,
 		DingTalkConnectSyncDisplayName:                         settings.DingTalkConnectSyncDisplayName,
 		DingTalkConnectSyncDept:                                settings.DingTalkConnectSyncDept,
