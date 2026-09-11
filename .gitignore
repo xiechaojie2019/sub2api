@@ -157,3 +157,6 @@ output/
 .vite/
 # 本地闭源插件开发目录及构建产物不进入 Sub2API 仓库
 /plugins/
+
+# WorkBuddy AI 工作区数据（本地记忆/配置，不入库）
+.workbuddy-ai/
