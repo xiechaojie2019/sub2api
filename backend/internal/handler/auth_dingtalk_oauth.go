@@ -608,7 +608,9 @@ func sanitizeDingTalkEmailLocalPart(raw string) string {
 			r >= 'A' && r <= 'Z',
 			r >= '0' && r <= '9',
 			r == '.', r == '_', r == '-':
-			b.WriteRune(r)
+			// strings.Builder 的写入永不失败（WriteRune 恒返回 nil error），
+			// 这里显式丢弃返回值以满足 errcheck。
+			_, _ = b.WriteRune(r)
 		}
 	}
 	return strings.Trim(b.String(), ".-_")
@@ -663,7 +665,11 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 	// mail.ParseAddress 会接受 "张三 <a@b.com>" 这类带显示名的形式，而服务层是按裸地址入库的，
 	// 直接放行会写入畸形邮箱；超过 255 字符则会被服务层拒绝并冒泡成错误页。
 	parsed, parseErr := mail.ParseAddress(email)
-	if parseErr != nil || !strings.EqualFold(parsed.Address, email) || len(email) > 255 {
+	if parseErr != nil {
+		slog.Warn("dingtalk auto provision: resolved email is unparsable, fallback to manual flow", "email", email)
+		return false, nil
+	}
+	if !strings.EqualFold(parsed.Address, email) || len(email) > 255 {
 		slog.Warn("dingtalk auto provision: resolved email is unusable, fallback to manual flow", "email", email)
 		return false, nil
 	}
