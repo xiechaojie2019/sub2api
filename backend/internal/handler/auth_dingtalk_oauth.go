@@ -624,12 +624,23 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 			"has_job_number", staff != nil && strings.TrimSpace(staff.JobNumber) != "")
 		return false, nil
 	}
-	if _, err := mail.ParseAddress(email); err != nil {
-		slog.Warn("dingtalk auto provision: resolved email is invalid", "email", email, "err", err.Error())
+	// 邮箱必须是"裸地址"且长度合法：
+	// mail.ParseAddress 会接受 "张三 <a@b.com>" 这类带显示名的形式，而服务层是按裸地址入库的，
+	// 直接放行会写入畸形邮箱；超过 255 字符则会被服务层拒绝并冒泡成错误页。
+	parsed, parseErr := mail.ParseAddress(email)
+	if parseErr != nil || !strings.EqualFold(parsed.Address, email) || len(email) > 255 {
+		slog.Warn("dingtalk auto provision: resolved email is unusable, fallback to manual flow", "email", email)
 		return false, nil
 	}
 	password := dingTalkAutoProvisionPassword(email)
 	if password == "" {
+		return false, nil
+	}
+
+	// 邀请码模式下新用户必须携带邀请码，自动建号无法提供：
+	// 提前交回原有流程（渲染邀请码输入框），避免走到服务层报错页。
+	if h.settingSvc != nil && h.settingSvc.IsInvitationCodeEnabled(c.Request.Context()) {
+		slog.Info("dingtalk auto provision: invitation code mode enabled, fallback to manual flow", "email", email)
 		return false, nil
 	}
 
