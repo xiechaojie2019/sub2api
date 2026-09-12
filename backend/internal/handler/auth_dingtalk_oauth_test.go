@@ -430,10 +430,18 @@ func TestSanitizeDingTalkEmailLocalPart(t *testing.T) {
 	}
 }
 
-// TestDingTalkAutoProvisionPassword 验证初始密码取邮箱 @ 前面部分。
-func TestDingTalkAutoProvisionPassword(t *testing.T) {
-	require.Equal(t, "zhangsan", dingTalkAutoProvisionPassword("zhangsan@corp.com"))
-	require.Equal(t, "a001", dingTalkAutoProvisionPassword("a001@fjdaze.com"))
-	require.Equal(t, "", dingTalkAutoProvisionPassword(""))
-	require.Equal(t, "", dingTalkAutoProvisionPassword("@corp.com"))
+// TestDingTalkEmailLocalPart 验证取邮箱 @ 前面部分（初始密码 / username 兜底都用它）。
+func TestDingTalkEmailLocalPart(t *testing.T) {
+	require.Equal(t, "zhangsan", dingTalkEmailLocalPart("zhangsan@corp.com"))
+	require.Equal(t, "a001", dingTalkEmailLocalPart("a001@fjdaze.com"))
+	require.Equal(t, "", dingTalkEmailLocalPart(""))
+	require.Equal(t, "", dingTalkEmailLocalPart("@corp.com"))
+}
+
+// TestDingTalkProvisionUsername 验证 username 取值优先级：真实姓名 > 昵称 > 兜底值。
+func TestDingTalkProvisionUsername(t *testing.T) {
+	require.Equal(t, "张三", dingTalkProvisionUsername(&DingTalkStaffInfo{Name: "张三", Nickname: "zs"}, "fallback"))
+	require.Equal(t, "zs", dingTalkProvisionUsername(&DingTalkStaffInfo{Nickname: "zs"}, "fallback"))
+	require.Equal(t, "fallback", dingTalkProvisionUsername(&DingTalkStaffInfo{}, "fallback"))
+	require.Equal(t, "fallback", dingTalkProvisionUsername(nil, "fallback"))
 }

@@ -496,11 +496,32 @@ func (h *AuthHandler) DingTalkOAuthCallback(c *gin.Context) {
 			return
 		}
 		syntheticEmail := buildDingTalkSyntheticEmail(unionID)
+		// 回调内直接建号并登录（与 wechat provider 同形）。
+		// 修复：原先这里只建 session、不设 TargetUserID，exchange 不会签发 token，
+		// 前端 getOAuthCompletionKind 会把它误判成 'bind'，弹「绑定成功」但实际未登录。
+		handled, provisionErr := h.startDingTalkDirectLogin(
+			c, cfg, identityKey, syntheticEmail,
+			dingTalkProvisionUsername(staff, dingTalkEmailLocalPart(syntheticEmail)), "", staff,
+			redirectTo, browserSessionKey, upstreamClaims,
+		)
+		if provisionErr != nil {
+			redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(provisionErr), infraerrors.Message(provisionErr))
+			return
+		}
+		if handled {
+			redirectToFrontendCallback(c, frontendCallback)
+			return
+		}
+		// 邀请码模式：静默建号不可行，标记 invitation_required 让前端渲染邀请码输入框。
 		if err := h.createOAuthPendingSession(c, oauthPendingSessionPayload{
 			Intent: oauthIntentLogin, Identity: identityKey, TargetUserID: nil,
 			ResolvedEmail: syntheticEmail, RedirectTo: redirectTo, BrowserSessionKey: browserSessionKey,
 			UpstreamIdentityClaims: upstreamClaims,
-			CompletionResponse:     map[string]any{"redirect": redirectTo, "synthetic_email": syntheticEmail},
+			CompletionResponse: map[string]any{
+				"redirect":        redirectTo,
+				"synthetic_email": syntheticEmail,
+				"error":           "invitation_required",
+			},
 		}); err != nil {
 			redirectOAuthError(c, frontendCallback, "session_error", infraerrors.Reason(err), infraerrors.Message(err))
 			return
@@ -593,8 +614,22 @@ func sanitizeDingTalkEmailLocalPart(raw string) string {
 	return strings.Trim(b.String(), ".-_")
 }
 
-// dingTalkAutoProvisionPassword 取邮箱 @ 前面部分作为初始密码。
-func dingTalkAutoProvisionPassword(email string) string {
+// dingTalkProvisionUsername 选择建号用的 username：企业真实姓名 > 钉钉昵称 > fallback。
+func dingTalkProvisionUsername(staff *DingTalkStaffInfo, fallback string) string {
+	if staff != nil {
+		if name := strings.TrimSpace(staff.Name); name != "" {
+			return name
+		}
+		if nick := strings.TrimSpace(staff.Nickname); nick != "" {
+			return nick
+		}
+	}
+	return fallback
+}
+
+// dingTalkEmailLocalPart 取邮箱 @ 前面部分。
+// 用于自动建号的初始密码，以及 username 的兜底值。
+func dingTalkEmailLocalPart(email string) string {
 	at := strings.Index(email, "@")
 	if at <= 0 {
 		return ""
@@ -632,7 +667,7 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 		slog.Warn("dingtalk auto provision: resolved email is unusable, fallback to manual flow", "email", email)
 		return false, nil
 	}
-	password := dingTalkAutoProvisionPassword(email)
+	password := dingTalkEmailLocalPart(email)
 	if password == "" {
 		return false, nil
 	}
@@ -660,22 +695,48 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 	}
 
 	// username：企业真实姓名 > 钉钉昵称 > 邮箱 @ 前部分
-	username := strings.TrimSpace(staff.Name)
-	if username == "" {
-		username = strings.TrimSpace(staff.Nickname)
-	}
-	if username == "" {
-		username = password
-	}
+	username := dingTalkProvisionUsername(staff, password)
 
+	return h.startDingTalkDirectLogin(
+		c, cfg, identityKey, email, username, password, staff,
+		redirectTo, browserSessionKey, upstreamClaims,
+	)
+}
+
+// startDingTalkDirectLogin 建号（或复用同邮箱已有账号）并创建带 TargetUserID 的 pending session，
+// 使前端 exchange 时能直接签发 token 完成登录。
+//
+// 与 wechat provider 的回调建号模式一致：token 不放进 CompletionResponse
+// （exchange 的 normalizePendingOAuthCompletionResponse 会剥离 token 字段），
+// 而是靠 TargetUserID 让 exchange 统一签发。
+//
+// password 为空时由服务层生成随机密码。
+// handled=false 表示未建号（邀请码模式），调用方交回原有流程。
+func (h *AuthHandler) startDingTalkDirectLogin(
+	c *gin.Context,
+	cfg config.DingTalkConnectConfig,
+	identityKey service.PendingAuthIdentityKey,
+	email string,
+	username string,
+	password string,
+	staff *DingTalkStaffInfo,
+	redirectTo string,
+	browserSessionKey string,
+	upstreamClaims map[string]any,
+) (bool, error) {
 	_, user, err := h.authService.LoginOrRegisterOAuthWithTokenPairAndPassword(
 		c.Request.Context(), email, username, password, "", "", "", "dingtalk",
 	)
 	if err != nil {
+		if errors.Is(err, service.ErrOAuthInvitationRequired) {
+			// 邀请码模式：静默建号不可行，交回原有流程渲染邀请码输入。
+			slog.Info("dingtalk direct login: invitation code required, fallback to manual flow", "email", email)
+			return false, nil
+		}
 		return false, err
 	}
 	if user == nil || user.ID <= 0 {
-		return false, infraerrors.InternalServer("DINGTALK_AUTO_PROVISION_FAILED", "failed to provision dingtalk user")
+		return false, infraerrors.InternalServer("DINGTALK_DIRECT_LOGIN_FAILED", "failed to provision dingtalk user")
 	}
 
 	if err := h.createOAuthPendingSession(c, oauthPendingSessionPayload{
@@ -688,12 +749,12 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 	}
 
 	// 首次建号：把钉钉昵称/姓名写入 users.username，并同步属性表（异步，不阻塞跳转）。
+	userID := user.ID
 	runDingTalkSyncAsync(c.Request.Context(), func(ctx context.Context) {
-		h.syncDingTalkIdentity(ctx, cfg, h.dingTalkClient(cfg), user.ID, staff, true)
+		h.syncDingTalkIdentity(ctx, cfg, h.dingTalkClient(cfg), userID, staff, true)
 	})
 
-	slog.Info("dingtalk auto provision: user provisioned",
-		"user_id", user.ID, "email", email, "job_number_present", strings.TrimSpace(staff.JobNumber) != "")
+	slog.Info("dingtalk direct login: user provisioned", "user_id", userID, "email", email)
 	return true, nil
 }
 
