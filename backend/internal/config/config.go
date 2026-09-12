@@ -2630,6 +2630,7 @@ func setEnvReachableDefaults() {
 	viper.SetDefault("dingtalk_connect.internal_corp_id", "")
 	viper.SetDefault("dingtalk_connect.redirect_url", "")
 	viper.SetDefault("dingtalk_connect.bypass_registration", false)
+	viper.SetDefault("dingtalk_connect.auto_provision", false)
 	viper.SetDefault("dingtalk_connect.username_attribute_key", "")
 	viper.SetDefault("dingtalk_connect.enable_attribute_matching", false)
 	viper.SetDefault("dingtalk_connect.enable_attribute_sync", false)
