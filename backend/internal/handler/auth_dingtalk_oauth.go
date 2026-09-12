@@ -672,13 +672,6 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 		return false, nil
 	}
 
-	// 邀请码模式下新用户必须携带邀请码，自动建号无法提供：
-	// 提前交回原有流程（渲染邀请码输入框），避免走到服务层报错页。
-	if h.settingSvc != nil && h.settingSvc.IsInvitationCodeEnabled(c.Request.Context()) {
-		slog.Info("dingtalk auto provision: invitation code mode enabled, fallback to manual flow", "email", email)
-		return false, nil
-	}
-
 	client := h.entClient()
 	if client == nil {
 		return false, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
