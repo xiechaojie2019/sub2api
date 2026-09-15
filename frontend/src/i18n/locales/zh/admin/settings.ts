@@ -333,7 +333,7 @@ export default {
         bypassRegistrationHint: '即使「开放注册」关闭时也可以通过钉钉登录来注册',
         autoProvision: '扫码自动建号',
         autoProvisionHint:
-          '钉钉扫码后若账号不存在，自动用钉钉邮箱（缺失时用「工号@fjdaze.com」）建号并直接登录，不再弹出补邮箱或选择账户页面。邮箱已被其他账号占用时会退回手动流程。',
+          "钉钉扫码后若账号不存在，自动用钉钉邮箱（缺失时用「工号{'@'}fjdaze.com」）建号并直接登录，不再弹出补邮箱或选择账户页面。邮箱已被其他账号占用时会退回手动流程。",
         syncDisplayName: '同步钉钉姓名',
         syncDisplayNameHint: '登录时将钉钉姓名写入 username 字段（同时记录到 dingtalk_name 属性）',
         syncCorpEmail: '同步企业邮箱',

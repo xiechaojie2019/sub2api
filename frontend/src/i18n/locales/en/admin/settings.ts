@@ -336,7 +336,7 @@ export default {
         bypassRegistrationHint: 'Allow new users to register via DingTalk even when public registration is disabled.',
         autoProvision: 'Auto-create account on scan',
         autoProvisionHint:
-          'When a DingTalk scan finds no existing account, create one automatically using the DingTalk email (or "job number@fjdaze.com" when no email is returned) and sign in directly — skipping the email-completion and account-choice screens. Falls back to the manual flow if the email is already taken.',
+          "When a DingTalk scan finds no existing account, create one automatically using the DingTalk email (or job number{'@'}fjdaze.com when no email is returned) and sign in directly — skipping the email-completion and account-choice screens. Falls back to the manual flow if the email is already taken.",
         syncDisplayName: 'Sync DingTalk display name',
         syncDisplayNameHint: 'Overwrite username with the DingTalk staff name on each login (also stored in the dingtalk_name attribute).',
         syncCorpEmail: 'Sync corporate email',
