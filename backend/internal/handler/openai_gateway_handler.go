@@ -254,6 +254,10 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	// 请求/响应体捕获缓冲：worker 池以 background ctx 运行，须显式搬运指针。
+	if capture, _ := parent.Value(ctxkey.UsageBodyCapture).(*service.UsageBodyCapture); capture != nil {
+		base = context.WithValue(base, ctxkey.UsageBodyCapture, capture)
+	}
 	return base
 }
 

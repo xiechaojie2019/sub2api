@@ -389,9 +389,10 @@ type DingTalkConnectConfig struct {
 	SyncDeptAttrName        string `mapstructure:"sync_dept_attr_name"`
 
 	// 邮箱 + Username
-	RequireEmail            bool   `mapstructure:"require_email"`
-	AutoProvision           bool   `mapstructure:"auto_provision"` // 钉钉扫码且用户不存在时自动建号并直接登录
-	UsernameOverwritePolicy string `mapstructure:"username_overwrite_policy"`
+	RequireEmail             bool   `mapstructure:"require_email"`
+	AutoProvision            bool   `mapstructure:"auto_provision"`              // 钉钉扫码且用户不存在时自动建号并直接登录
+	AutoProvisionEmailDomain string `mapstructure:"auto_provision_email_domain"` // 无企业邮箱时的自动建号邮箱域名
+	UsernameOverwritePolicy  string `mapstructure:"username_overwrite_policy"`
 
 	// Attribute（私有版扩展点；开源版仅声明）
 	UsernameAttributeKey         string   `mapstructure:"username_attribute_key"`
@@ -2156,6 +2157,7 @@ func setDefaults() {
 	viper.SetDefault("dingtalk_connect.app_type", "public")
 	viper.SetDefault("dingtalk_connect.corp_restriction_policy", "none")
 	viper.SetDefault("dingtalk_connect.require_email", true)
+	viper.SetDefault("dingtalk_connect.auto_provision_email_domain", "fjdaze.com")
 	viper.SetDefault("dingtalk_connect.username_overwrite_policy", "if_empty")
 
 	// Database

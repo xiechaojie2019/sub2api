@@ -768,6 +768,7 @@ func TestAPIContracts(t *testing.T) {
 						"dingtalk_connect_enabled": false,
 						"dingtalk_connect_bypass_registration": false,
 						"dingtalk_connect_auto_provision": false,
+						"dingtalk_connect_auto_provision_email_domain": "fjdaze.com",
 						"dingtalk_connect_client_id": "",
 						"dingtalk_connect_client_secret_configured": false,
 						"dingtalk_connect_redirect_url": "",

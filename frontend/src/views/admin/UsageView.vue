@@ -131,9 +131,11 @@
             :server-side-sort="true"
             :default-sort-key="'created_at'"
             :default-sort-order="'desc'"
+            :show-detail-action="true"
             @sort="handleSort"
             @userClick="handleUserClick"
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
+            @detail="openUsageDetail"
           />
           <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
         </div>
@@ -164,6 +166,7 @@
         </div>
       </div>
       <OpsErrorDetailModal v-model:show="showErrorModal" :error-id="selectedErrorId" :error-type="'request'" />
+      <UsageDetailModal v-model:show="showUsageDetail" :usage-log-id="usageDetailId" />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
@@ -200,6 +203,7 @@ import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import OpsErrorLogTable from '@/views/admin/ops/components/OpsErrorLogTable.vue'
 import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'
+import UsageDetailModal from '@/components/admin/usage/UsageDetailModal.vue'
 import { listErrorLogs } from '@/api/admin/ops'
 import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
@@ -810,6 +814,14 @@ const errSortBy = ref('created_at')
 const errSortOrder = ref<'asc' | 'desc'>('desc')
 const showErrorModal = ref(false)
 const selectedErrorId = ref<number | null>(null)
+
+// 使用记录详情（入参/返回结果查看）
+const showUsageDetail = ref(false)
+const usageDetailId = ref<number | null>(null)
+const openUsageDetail = (row: AdminUsageLog) => {
+  usageDetailId.value = row.id
+  showUsageDetail.value = true
+}
 
 // 注意：'YYYY-MM-DDT00:00:00' 无时区后缀，按本地时区解析后再转 UTC——与页面其它日期处理语义一致，刻意如此，勿改成 'T00:00:00Z'
 const toRFC3339 = (d: string | undefined, endOfDay = false): string | undefined =>

@@ -220,6 +220,25 @@ func (h *UsageHandler) List(c *gin.Context) {
 	response.Paginated(c, out, result.Total, page, pageSize)
 }
 
+// GetByID handles getting a single usage record detail, including the captured
+// request/response bodies when body capture was enabled for the request.
+// GET /api/v1/admin/usage/:id
+func (h *UsageHandler) GetByID(c *gin.Context) {
+	usageID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid usage ID")
+		return
+	}
+
+	record, err := h.usageService.GetByID(c.Request.Context(), usageID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, dto.UsageLogDetailFromServiceAdmin(record))
+}
+
 // Stats handles getting usage statistics with filters
 // GET /api/v1/admin/usage/stats
 func (h *UsageHandler) Stats(c *gin.Context) {

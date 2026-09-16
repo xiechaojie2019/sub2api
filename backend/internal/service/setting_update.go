@@ -258,6 +258,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyDingTalkConnectInternalCorpID] = settings.DingTalkConnectInternalCorpID
 	updates[SettingKeyDingTalkConnectBypassRegistration] = strconv.FormatBool(settings.DingTalkConnectBypassRegistration)
 	updates[SettingKeyDingTalkConnectAutoProvision] = strconv.FormatBool(settings.DingTalkConnectAutoProvision)
+	updates[SettingKeyDingTalkConnectAutoProvisionEmailDomain] = normalizeDingTalkAutoProvisionEmailDomain(settings.DingTalkConnectAutoProvisionEmailDomain)
 	updates[SettingKeyDingTalkConnectSyncCorpEmail] = strconv.FormatBool(settings.DingTalkConnectSyncCorpEmail)
 	updates[SettingKeyDingTalkConnectSyncDisplayName] = strconv.FormatBool(settings.DingTalkConnectSyncDisplayName)
 	updates[SettingKeyDingTalkConnectSyncDept] = strconv.FormatBool(settings.DingTalkConnectSyncDept)
@@ -548,6 +549,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	updates[SettingKeyAllowUserViewErrorRequests] = strconv.FormatBool(settings.AllowUserViewErrorRequests)
+	updates[SettingKeyUsageBodyCaptureEnabled] = strconv.FormatBool(settings.UsageBodyCaptureEnabled)
+	updates[SettingKeyUsageBodyCaptureMaxBytes] = strconv.Itoa(ClampUsageBodyCaptureMaxBytes(strconv.Itoa(settings.UsageBodyCaptureMaxBytes)))
 
 	return updates, nil
 }
@@ -694,6 +697,14 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	}
 
 	// 先使 inflight singleflight 失效，再刷新缓存，缩小旧值覆盖新值的竞态窗口
+	s.usageBodyCaptureSF.Forget("usage_body_capture")
+	s.usageBodyCaptureCache.Store(&cachedUsageBodyCaptureRuntime{
+		runtime: UsageBodyCaptureRuntime{
+			Enabled:  settings.UsageBodyCaptureEnabled,
+			MaxBytes: ClampUsageBodyCaptureMaxBytes(strconv.Itoa(settings.UsageBodyCaptureMaxBytes)),
+		},
+		expiresAt: time.Now().Add(usageBodyCaptureCacheTTL).UnixNano(),
+	})
 	versionBoundsSF.Forget("version_bounds")
 	versionBoundsCache.Store(&cachedVersionBounds{
 		min:       settings.MinClaudeCodeVersion,

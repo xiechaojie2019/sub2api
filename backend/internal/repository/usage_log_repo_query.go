@@ -21,8 +21,13 @@ import (
 
 const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, native_compaction_v2, created_at"
 
+// usageLogDetailSelectColumns 在基础列后追加请求/响应体大字段，仅供单条详情查询使用；
+// 列表查询必须继续用 usageLogSelectColumns，避免每行拉取大 TEXT。
+const usageLogDetailSelectColumns = usageLogSelectColumns +
+	", request_body, response_body, request_body_truncated, response_body_truncated"
+
 func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *service.UsageLog, err error) {
-	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE id = $1"
+	query := "SELECT " + usageLogDetailSelectColumns + " FROM usage_logs WHERE id = $1"
 	rows, err := r.sql.QueryContext(ctx, query, id)
 	if err != nil {
 		return nil, err
@@ -41,12 +46,26 @@ func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *servic
 		}
 		return nil, service.ErrUsageLogNotFound
 	}
-	log, err = scanUsageLog(rows)
+	var (
+		requestBody           sql.NullString
+		responseBody          sql.NullString
+		requestBodyTruncated  sql.NullBool
+		responseBodyTruncated sql.NullBool
+	)
+	log, err = scanUsageLog(rows, &requestBody, &responseBody, &requestBodyTruncated, &responseBodyTruncated)
 	if err != nil {
 		return nil, err
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
+	}
+	if requestBody.Valid {
+		log.RequestBody = &requestBody.String
+		log.RequestBodyTruncated = requestBodyTruncated.Bool
+	}
+	if responseBody.Valid {
+		log.ResponseBody = &responseBody.String
+		log.ResponseBodyTruncated = responseBodyTruncated.Bool
 	}
 	return log, nil
 }
@@ -438,7 +457,9 @@ func (r *usageLogRepository) loadSubscriptions(ctx context.Context, ids []int64)
 	return out, nil
 }
 
-func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, error) {
+// scanUsageLog 扫描 usageLogSelectColumns 顺序的基础列；extraDest 按位追加在
+// created_at 之后（详情查询用它扫描 request_body 等 4 个附加列），列表查询不传。
+func scanUsageLog(scanner interface{ Scan(...any) error }, extraDest ...any) (*service.UsageLog, error) {
 	var (
 		id                        int64
 		userID                    int64
@@ -505,7 +526,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		createdAt                 time.Time
 	)
 
-	if err := scanner.Scan(
+	dest := []any{
 		&id,
 		&userID,
 		&apiKeyID,
@@ -569,7 +590,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&sessionID,
 		&nativeCompactionV2,
 		&createdAt,
-	); err != nil {
+	}
+	dest = append(dest, extraDest...)
+	if err := scanner.Scan(dest...); err != nil {
 		return nil, err
 	}
 

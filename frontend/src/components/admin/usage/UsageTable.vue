@@ -18,7 +18,7 @@
     </div>
     <div class="overflow-auto">
       <DataTable
-        :columns="columns"
+        :columns="tableColumns"
         :data="data"
         :loading="loading"
         :server-side-sort="serverSideSort"
@@ -26,6 +26,18 @@
         :default-sort-order="defaultSortOrder"
         @sort="(key, order) => $emit('sort', key, order)"
       >
+        <template v-if="showDetailAction" #cell-actions="{ row }">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-primary-50 hover:text-primary-700 dark:border-dark-600 dark:bg-dark-800 dark:text-dark-200 dark:hover:bg-dark-700"
+            :title="t('usage.detail.actionTitle')"
+            @click="$emit('detail', row)"
+          >
+            <Icon name="document" class="h-3.5 w-3.5" />
+            {{ t('usage.detail.action') }}
+          </button>
+        </template>
+
         <template #cell-user="{ row }">
           <div class="text-sm">
             <button
@@ -595,6 +607,8 @@ interface Props {
   defaultSortOrder?: 'asc' | 'desc'
   showAccountBilling?: boolean
   showUpstreamEndpoint?: boolean
+  /** 是否追加“详情”操作列（管理员查看入参/返回结果） */
+  showDetailAction?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
 }
@@ -606,12 +620,14 @@ const props = withDefaults(defineProps<Props>(), {
   defaultSortOrder: 'asc',
   showAccountBilling: true,
   showUpstreamEndpoint: true,
+  showDetailAction: false,
   flat: false
 })
 const emit = defineEmits<{
   userClick: [userID: number, email?: string]
   sort: [key: string, order: 'asc' | 'desc']
   ipGeoBatchFailed: []
+  detail: [row: AdminUsageLog]
 }>()
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -621,6 +637,13 @@ const showUpstreamEndpoint = props.showUpstreamEndpoint
 const ipGeoBatchLoading = ref(false)
 
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
+
+// “详情”操作列仅按需追加，不进入列显隐配置（localStorage）。
+const tableColumns = computed<Column[]>(() => {
+  if (!props.showDetailAction) return props.columns
+  if (props.columns.some((col) => col.key === 'actions')) return props.columns
+  return [...props.columns, { key: 'actions', label: t('usage.detail.action'), sortable: false }]
+})
 
 const hasReasoningEffortMapping = (row: AdminUsageLog): boolean => {
   const requested = row.reasoning_effort?.trim() || ''

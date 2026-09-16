@@ -103,6 +103,10 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
 			createdAt,
+			sqlmock.AnyArg(), // request_body
+			sqlmock.AnyArg(), // response_body
+			sqlmock.AnyArg(), // request_body_truncated
+			sqlmock.AnyArg(), // response_body_truncated
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -198,6 +202,10 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
 			createdAt,
+			sqlmock.AnyArg(), // request_body
+			sqlmock.AnyArg(), // response_body
+			sqlmock.AnyArg(), // request_body_truncated
+			sqlmock.AnyArg(), // response_body_truncated
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -278,8 +286,8 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
 	prepared := prepareUsageLogInsert(log)
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
-	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
-	require.Equal(t, true, prepared.args[len(prepared.args)-2])
+	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-6])
+	require.Equal(t, true, prepared.args[len(prepared.args)-6])
 	require.Equal(t, int16(service.RequestTypeStream), prepared.args[30])
 	require.Equal(t, service.RequestTypeStream, log.RequestType)
 	require.True(t, log.Stream)

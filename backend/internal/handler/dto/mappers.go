@@ -751,6 +751,21 @@ func UsageLogFromService(l *service.UsageLog) *UsageLog {
 
 // UsageLogFromServiceAdmin converts a service UsageLog to DTO for admin users.
 // It includes minimal Account info (ID, Name only) and IP address.
+// UsageLogDetailFromServiceAdmin converts a service UsageLog to the admin detail
+// DTO, including the captured request/response bodies. Admin detail endpoint only.
+func UsageLogDetailFromServiceAdmin(l *service.UsageLog) *AdminUsageLogDetail {
+	if l == nil {
+		return nil
+	}
+	return &AdminUsageLogDetail{
+		AdminUsageLog:         *UsageLogFromServiceAdmin(l),
+		RequestBody:           l.RequestBody,
+		ResponseBody:          l.ResponseBody,
+		RequestBodyTruncated:  l.RequestBodyTruncated,
+		ResponseBodyTruncated: l.ResponseBodyTruncated,
+	}
+}
+
 func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	if l == nil {
 		return nil

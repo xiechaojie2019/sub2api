@@ -81,4 +81,8 @@ const (
 
 	// ClaudeCodeVersion stores the extracted Claude Code version from User-Agent (e.g. "2.1.22")
 	ClaudeCodeVersion Key = "ctx_claude_code_version"
+
+	// UsageBodyCapture 携带本次请求捕获的请求体/响应体缓冲（*service.UsageBodyCapture），
+	// 由 usage body 捕获中间件在网关路由上注入；用量落库时按系统开关读取。
+	UsageBodyCapture Key = "ctx_usage_body_capture"
 )

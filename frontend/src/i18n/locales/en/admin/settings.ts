@@ -1251,6 +1251,12 @@ export default {
         label: 'Allow users to view their own error requests',
         description: 'When enabled, users can see a redacted view of their failed requests on the usage page (no internal/upstream details). Requires ops monitoring enabled to have data.',
       },
+      usage_body_capture: {
+        label: 'Record request/response payloads for usage records',
+        description: 'When enabled, the gateway captures request and response payloads (truncated to the limit) so admins can inspect them in the usage record details. Payloads contain full conversation content — mind storage and privacy implications.',
+        maxBytesLabel: 'Per-side capture limit (bytes)',
+        maxBytesDescription: 'Maximum bytes recorded per request body and response body (1024 - 1048576); anything beyond is truncated.',
+      },
       saveSettings: 'Save Settings',
       saving: 'Saving...',
       settingsSaved: 'Settings saved successfully',

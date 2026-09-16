@@ -151,6 +151,11 @@ type SettingService struct {
 	openAIQuotaAutoPauseSettingsSF    singleflight.Group
 	openAIAPIKeyHealthBreakerCache    atomic.Value // *cachedOpenAIAPIKeyHealthBreakerSettings
 
+	// usageBodyCaptureCache 用量请求/响应体捕获开关的进程内缓存。
+	// 网关每个转发请求都会读取，禁止在热路径上直接访问 DB。
+	usageBodyCaptureCache atomic.Value // *cachedUsageBodyCaptureRuntime
+	usageBodyCaptureSF    singleflight.Group
+
 	channelMonitorRuntimeListenersMu sync.Mutex
 	channelMonitorRuntimeListeners   []func()
 }

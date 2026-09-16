@@ -1742,6 +1742,8 @@ export interface UsageLog {
   // User-Agent
   user_agent: string | null
   ip_address?: string | null
+  // 客户端显式会话标识（session_id / X-Session-Id 请求头）
+  session_id?: string | null
 
   // Cache TTL Override
   cache_ttl_overridden: boolean
@@ -1781,6 +1783,14 @@ export interface AdminUsageLog extends UsageLog {
 
   // 最小账号信息（仅管理员接口返回）
   account?: UsageLogAccountSummary
+}
+
+/** 管理端单条使用记录详情：仅此结构携带捕获的请求/响应体，列表接口不返回。 */
+export interface AdminUsageLogDetail extends AdminUsageLog {
+  request_body?: string | null
+  response_body?: string | null
+  request_body_truncated?: boolean
+  response_body_truncated?: boolean
 }
 
 export interface UsageCleanupFilters {

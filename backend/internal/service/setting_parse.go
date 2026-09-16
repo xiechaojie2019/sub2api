@@ -266,6 +266,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAIAdvancedSchedulerWeightSessionSticky:         "",
 
 		SettingKeyAllowUserViewErrorRequests: "false",
+
+		SettingKeyUsageBodyCaptureEnabled: "false",
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
@@ -522,6 +524,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.DingTalkConnectAutoProvision = strings.EqualFold(strings.TrimSpace(v), "true")
 	} else {
 		result.DingTalkConnectAutoProvision = dingTalkBase.AutoProvision
+	}
+	result.DingTalkConnectAutoProvisionEmailDomain = normalizeDingTalkAutoProvisionEmailDomain(strings.TrimSpace(settings[SettingKeyDingTalkConnectAutoProvisionEmailDomain]))
+	if result.DingTalkConnectAutoProvisionEmailDomain == "" {
+		result.DingTalkConnectAutoProvisionEmailDomain = normalizeDingTalkAutoProvisionEmailDomain(dingTalkBase.AutoProvisionEmailDomain)
+	}
+	if result.DingTalkConnectAutoProvisionEmailDomain == "" {
+		result.DingTalkConnectAutoProvisionEmailDomain = "fjdaze.com"
 	}
 
 	if v, ok := settings[SettingKeyDingTalkConnectSyncCorpEmail]; ok && strings.TrimSpace(v) != "" {
@@ -986,6 +995,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	result.AllowUserViewErrorRequests = settings[SettingKeyAllowUserViewErrorRequests] == "true" // default false
+
+	result.UsageBodyCaptureEnabled = settings[SettingKeyUsageBodyCaptureEnabled] == "true" // default false（opt-in）
+	result.UsageBodyCaptureMaxBytes = ClampUsageBodyCaptureMaxBytes(settings[SettingKeyUsageBodyCaptureMaxBytes])
 
 	// Publish Grok default model_mapping options for accounts with empty mapping.
 	xai.SetRuntimeModelMappingOptions(xai.ModelMappingOptions{

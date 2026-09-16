@@ -568,6 +568,8 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	if repo == nil || usageLog == nil {
 		return
 	}
+	// 请求/响应体快照必须在 detached 之前从请求 ctx 上取出（detached 只保留取消语义）。
+	ApplyUsageBodyCapture(ctx, usageLog)
 	usageCtx, cancel := detachedBillingContext(ctx)
 	defer cancel()
 

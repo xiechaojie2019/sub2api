@@ -532,6 +532,7 @@ export interface SystemSettings {
   dingtalk_connect_internal_corp_id: string;
   dingtalk_connect_bypass_registration: boolean;
   dingtalk_connect_auto_provision: boolean;
+  dingtalk_connect_auto_provision_email_domain: string;
   dingtalk_connect_sync_corp_email: boolean;
   dingtalk_connect_sync_display_name: boolean;
   dingtalk_connect_sync_dept: boolean;
@@ -747,6 +748,10 @@ export interface SystemSettings {
 
   // Allow user view error requests
   allow_user_view_error_requests: boolean;
+
+  // Usage body capture (request/response payload recording for usage records)
+  usage_body_capture_enabled: boolean;
+  usage_body_capture_max_bytes: number;
 }
 
 export interface UpdateSettingsRequest {
@@ -871,6 +876,7 @@ export interface UpdateSettingsRequest {
   dingtalk_connect_internal_corp_id?: string;
   dingtalk_connect_bypass_registration?: boolean;
   dingtalk_connect_auto_provision?: boolean;
+  dingtalk_connect_auto_provision_email_domain?: string;
   dingtalk_connect_sync_corp_email?: boolean;
   dingtalk_connect_sync_display_name?: boolean;
   dingtalk_connect_sync_dept?: boolean;
@@ -1052,6 +1058,9 @@ export interface UpdateSettingsRequest {
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 
   allow_user_view_error_requests?: boolean;
+
+  usage_body_capture_enabled?: boolean;
+  usage_body_capture_max_bytes?: number;
 }
 
 /**

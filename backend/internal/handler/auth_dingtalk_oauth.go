@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
@@ -581,21 +582,28 @@ func buildDingTalkSyntheticEmail(userID string) string {
 // 钉钉未返回任何邮箱时，用 工号@该域名 生成登录邮箱。
 const dingTalkAutoProvisionEmailDomain = "fjdaze.com"
 
-// dingTalkAutoProvisionEmail 解析自动建号使用的邮箱。
-// 优先用钉钉返回的真实邮箱（staff.Email 已含 org_email/email/扩展字段三级 fallback）；
-// 没有邮箱时退回「工号@域名」；两者都拿不到返回空串（调用方据此放弃自动建号）。
-func dingTalkAutoProvisionEmail(staff *DingTalkStaffInfo) string {
+// dingTalkAutoProvisionEmail 仅使用钉钉企业姓名生成自动建号邮箱。
+// 钉钉返回的邮箱、工号和用户 ID 都不参与账号生成。
+func dingTalkAutoProvisionEmail(staff *DingTalkStaffInfo, domain string) string {
 	if staff == nil {
 		return ""
 	}
-	if email := strings.TrimSpace(staff.Email); email != "" {
-		return strings.ToLower(email)
-	}
-	local := sanitizeDingTalkEmailLocalPart(staff.JobNumber)
-	if local == "" {
+	name := sanitizeDingTalkNameLocalPart(staff.Name)
+	domain = service.NormalizeDingTalkAutoProvisionEmailDomain(domain)
+	if name == "" || domain == "" {
 		return ""
 	}
-	return strings.ToLower(local + "@" + dingTalkAutoProvisionEmailDomain)
+	return strings.ToLower(name + "@" + domain)
+}
+
+func sanitizeDingTalkNameLocalPart(raw string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(raw) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			_, _ = b.WriteRune(r)
+		}
+	}
+	return strings.Trim(b.String(), ".-_ ")
 }
 
 // sanitizeDingTalkEmailLocalPart 把钉钉工号清洗成可安全放入邮箱 local part 的字符串。
@@ -653,7 +661,7 @@ func (h *AuthHandler) tryDingTalkAutoProvision(
 	browserSessionKey string,
 	upstreamClaims map[string]any,
 ) (bool, error) {
-	email := dingTalkAutoProvisionEmail(staff)
+	email := dingTalkAutoProvisionEmail(staff, cfg.AutoProvisionEmailDomain)
 	if email == "" {
 		// 钉钉既没给邮箱也没有可用工号：不硬造账号，退回补邮箱页。
 		slog.Info("dingtalk auto provision: no usable email, fallback to manual flow",
@@ -1110,11 +1118,11 @@ func (h *AuthHandler) syncDingTalkIdentity(ctx context.Context, cfg config.DingT
 	// 仅首次注册时覆盖 users.username（避免每次登录覆盖用户后续手动改过的名字）。
 	// dingtalk_name 属性下面单独每次写入企业 name，不受此条件影响。
 	if syncUsername && cfg.SyncDisplayName {
-		username := strings.TrimSpace(staff.Nickname)
-		source := "nickname"
+		username := strings.TrimSpace(staff.Name)
+		source := "name"
 		if username == "" {
-			username = strings.TrimSpace(staff.Name)
-			source = "name(fallback)"
+			username = strings.TrimSpace(staff.Nickname)
+			source = "nickname(fallback)"
 		}
 		if username != "" && h.userService != nil {
 			if _, err := h.userService.UpdateProfile(ctx, userID, service.UpdateProfileRequest{Username: &username}); err != nil {

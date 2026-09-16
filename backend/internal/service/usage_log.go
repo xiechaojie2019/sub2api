@@ -191,6 +191,15 @@ type UsageLog struct {
 	// 与上游没有该头的路径为 nil。
 	UpstreamRequestID *string
 
+	// RequestBody / ResponseBody 是网关按系统开关捕获的客户端请求体与响应体
+	// 快照（按 usage_body_capture_max_bytes 截断）。Nil 表示该行未捕获。
+	// 仅管理端详情接口返回，列表与用户端 DTO 不携带。
+	RequestBody  *string
+	ResponseBody *string
+	// RequestBodyTruncated / ResponseBodyTruncated 标记内容因超出捕获上限被截断。
+	RequestBodyTruncated  bool
+	ResponseBodyTruncated bool
+
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool
 
