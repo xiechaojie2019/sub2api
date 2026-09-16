@@ -703,6 +703,21 @@ type AdminUsageLog struct {
 	Account *AccountSummary `json:"account,omitempty"`
 }
 
+// AdminUsageLogDetail 管理端单条使用记录详情：在列表 DTO 之上追加捕获的
+// 请求/响应体快照。快照字段仅允许经本结构从详情接口返回，列表接口绝不携带。
+type AdminUsageLogDetail struct {
+	AdminUsageLog
+
+	// RequestBody 捕获的客户端请求体（nil = 未开启捕获或该行未捕获）
+	RequestBody *string `json:"request_body,omitempty"`
+	// ResponseBody 捕获的响应体（nil = 未开启捕获或该行未捕获）
+	ResponseBody *string `json:"response_body,omitempty"`
+	// RequestBodyTruncated 请求体因超出捕获上限被截断
+	RequestBodyTruncated bool `json:"request_body_truncated"`
+	// ResponseBodyTruncated 响应体因超出捕获上限被截断
+	ResponseBodyTruncated bool `json:"response_body_truncated"`
+}
+
 type UsageCleanupFilters struct {
 	StartTime   time.Time `json:"start_time"`
 	EndTime     time.Time `json:"end_time"`

@@ -190,6 +190,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DingTalkConnectInternalCorpID:                          settings.DingTalkConnectInternalCorpID,
 		DingTalkConnectBypassRegistration:                      settings.DingTalkConnectBypassRegistration,
 		DingTalkConnectAutoProvision:                           settings.DingTalkConnectAutoProvision,
+		DingTalkConnectAutoProvisionEmailDomain:                settings.DingTalkConnectAutoProvisionEmailDomain,
 		DingTalkConnectSyncCorpEmail:                           settings.DingTalkConnectSyncCorpEmail,
 		DingTalkConnectSyncDisplayName:                         settings.DingTalkConnectSyncDisplayName,
 		DingTalkConnectSyncDept:                                settings.DingTalkConnectSyncDept,
@@ -395,6 +396,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AccountSchedulingThresholds: settings.AccountSchedulingThresholds,
 		AllowUserViewErrorRequests:  settings.AllowUserViewErrorRequests,
+
+		UsageBodyCaptureEnabled:  settings.UsageBodyCaptureEnabled,
+		UsageBodyCaptureMaxBytes: settings.UsageBodyCaptureMaxBytes,
 	}
 
 	// OpenAI fast policy (stored under a dedicated setting key)

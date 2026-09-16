@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminUsageLog, UsageQueryParams, PaginatedResponse, UsageRequestType } from '@/types'
+import type { AdminUsageLog, AdminUsageLogDetail, UsageQueryParams, PaginatedResponse, UsageRequestType } from '@/types'
 import type { EndpointStat } from '@/types'
 
 // ==================== Types ====================
@@ -112,6 +112,17 @@ export async function list(
 }
 
 /**
+ * Get a single usage log detail, including captured request/response bodies
+ * when body capture was enabled for the request (admin only)
+ * @param id - Usage log ID
+ * @returns Usage log detail
+ */
+export async function getById(id: number): Promise<AdminUsageLogDetail> {
+  const { data } = await apiClient.get<AdminUsageLogDetail>(`/admin/usage/${id}`)
+  return data
+}
+
+/**
  * Get usage statistics with optional filters (admin only)
  * @param params - Query parameters for filtering
  * @returns Usage statistics
@@ -209,6 +220,7 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
 
 export const adminUsageAPI = {
   list,
+  getById,
   getStats,
   searchUsers,
   searchApiKeys,

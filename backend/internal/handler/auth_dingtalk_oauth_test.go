@@ -392,26 +392,24 @@ func TestResolveDingTalkDeptPath_MultiLevel(t *testing.T) {
 
 // ─── auto_provision（扫码自动建号）──────────────────────────────────────────
 
-// TestDingTalkAutoProvisionEmail_PrefersStaffEmail 验证优先使用钉钉返回的真实邮箱。
-func TestDingTalkAutoProvisionEmail_PrefersStaffEmail(t *testing.T) {
-	staff := &DingTalkStaffInfo{Email: "ZhangSan@Corp.com", JobNumber: "A001"}
-
-	require.Equal(t, "zhangsan@corp.com", dingTalkAutoProvisionEmail(staff))
+func TestDingTalkAutoProvisionEmail_UsesNameAndUserID(t *testing.T) {
+	staff := &DingTalkStaffInfo{Name: "杜兆铃", UserID: "572769361526111129", Email: "ignored@corp.com", JobNumber: "A001"}
+	require.Equal(t, "杜兆铃@fjdaze.com", dingTalkAutoProvisionEmail(staff, "fjdaze.com"))
 }
 
-// TestDingTalkAutoProvisionEmail_FallsBackToJobNumber 验证无邮箱时退回「工号@域名」。
-func TestDingTalkAutoProvisionEmail_FallsBackToJobNumber(t *testing.T) {
-	staff := &DingTalkStaffInfo{JobNumber: "A001"}
-
-	require.Equal(t, "a001@"+dingTalkAutoProvisionEmailDomain, dingTalkAutoProvisionEmail(staff))
+func TestDingTalkAutoProvisionEmail_UsesConfiguredDomain(t *testing.T) {
+	staff := &DingTalkStaffInfo{Name: "张三", UserID: "u001", Email: "ignored@corp.com", JobNumber: "A001"}
+	require.Equal(t, "张三@example.test", dingTalkAutoProvisionEmail(staff, " Example.TEST "))
 }
 
-// TestDingTalkAutoProvisionEmail_NoUsableSeed 验证拿不到可用邮箱种子时返回空串（调用方放弃自动建号）。
-func TestDingTalkAutoProvisionEmail_NoUsableSeed(t *testing.T) {
-	require.Equal(t, "", dingTalkAutoProvisionEmail(&DingTalkStaffInfo{}))
-	require.Equal(t, "", dingTalkAutoProvisionEmail(nil))
-	// 工号全是不合法字符 → 清洗后为空
-	require.Equal(t, "", dingTalkAutoProvisionEmail(&DingTalkStaffInfo{JobNumber: "工号：壹"}))
+func TestDingTalkAutoProvisionEmail_RequiresName(t *testing.T) {
+	require.Empty(t, dingTalkAutoProvisionEmail(&DingTalkStaffInfo{Email: "ignored@corp.com", JobNumber: "A001", UserID: "u001"}, "fjdaze.com"))
+	require.Empty(t, dingTalkAutoProvisionEmail(nil, "fjdaze.com"))
+}
+
+func TestDingTalkAutoProvisionEmail_IgnoresJobNumberAndEmail(t *testing.T) {
+	staff := &DingTalkStaffInfo{Name: "张三", UserID: "u001", Email: "ignored@corp.com", JobNumber: "工号：壹"}
+	require.Equal(t, "张三@fjdaze.com", dingTalkAutoProvisionEmail(staff, "fjdaze.com"))
 }
 
 // TestSanitizeDingTalkEmailLocalPart 验证工号清洗规则。
@@ -438,7 +436,6 @@ func TestDingTalkEmailLocalPart(t *testing.T) {
 	require.Equal(t, "", dingTalkEmailLocalPart("@corp.com"))
 }
 
-// TestDingTalkProvisionUsername 验证 username 取值优先级：真实姓名 > 昵称 > 兜底值。
 func TestDingTalkProvisionUsername(t *testing.T) {
 	require.Equal(t, "张三", dingTalkProvisionUsername(&DingTalkStaffInfo{Name: "张三", Nickname: "zs"}, "fallback"))
 	require.Equal(t, "zs", dingTalkProvisionUsername(&DingTalkStaffInfo{Nickname: "zs"}, "fallback"))

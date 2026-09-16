@@ -70,24 +70,25 @@ type SystemSettings struct {
 	LinuxDoConnectRedirectURL            string
 
 	// DingTalk Connect OAuth 登录
-	DingTalkConnectEnabled                 bool
-	DingTalkConnectClientID                string
-	DingTalkConnectClientSecret            string
-	DingTalkConnectClientSecretConfigured  bool
-	DingTalkConnectRedirectURL             string
-	DingTalkConnectCorpRestrictionPolicy   string
-	DingTalkConnectInternalCorpID          string
-	DingTalkConnectBypassRegistration      bool
-	DingTalkConnectAutoProvision           bool
-	DingTalkConnectSyncCorpEmail           bool
-	DingTalkConnectSyncDisplayName         bool
-	DingTalkConnectSyncDept                bool
-	DingTalkConnectSyncCorpEmailAttrKey    string
-	DingTalkConnectSyncDisplayNameAttrKey  string
-	DingTalkConnectSyncDeptAttrKey         string
-	DingTalkConnectSyncCorpEmailAttrName   string
-	DingTalkConnectSyncDisplayNameAttrName string
-	DingTalkConnectSyncDeptAttrName        string
+	DingTalkConnectEnabled                  bool
+	DingTalkConnectClientID                 string
+	DingTalkConnectClientSecret             string
+	DingTalkConnectClientSecretConfigured   bool
+	DingTalkConnectRedirectURL              string
+	DingTalkConnectCorpRestrictionPolicy    string
+	DingTalkConnectInternalCorpID           string
+	DingTalkConnectBypassRegistration       bool
+	DingTalkConnectAutoProvision            bool
+	DingTalkConnectAutoProvisionEmailDomain string
+	DingTalkConnectSyncCorpEmail            bool
+	DingTalkConnectSyncDisplayName          bool
+	DingTalkConnectSyncDept                 bool
+	DingTalkConnectSyncCorpEmailAttrKey     string
+	DingTalkConnectSyncDisplayNameAttrKey   string
+	DingTalkConnectSyncDeptAttrKey          string
+	DingTalkConnectSyncCorpEmailAttrName    string
+	DingTalkConnectSyncDisplayNameAttrName  string
+	DingTalkConnectSyncDeptAttrName         string
 
 	// WeChat Connect OAuth 登录
 	WeChatConnectEnabled                   bool
@@ -316,6 +317,10 @@ type SystemSettings struct {
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool
+
+	// 使用记录请求/响应体捕获（默认关闭；MaxBytes 为 0 时按默认 64KB 处理）
+	UsageBodyCaptureEnabled  bool
+	UsageBodyCaptureMaxBytes int
 }
 
 type DefaultSubscriptionSetting struct {

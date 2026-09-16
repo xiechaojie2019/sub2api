@@ -3285,7 +3285,20 @@
                     <Toggle v-model="form.dingtalk_connect_auto_provision" />
                   </div>
 
-                  <!-- 身份同步开关（仅 internal_only 模式下可见） -->
+                  <!-- 自动建号邮箱域名 -->
+                  <div class="pt-3">
+                    <label class="text-sm text-gray-600 dark:text-gray-400">{{
+                      localText("自动建号邮箱域名", "Auto-provision email domain")
+                    }}</label>
+                    <input
+                      v-model="form.dingtalk_connect_auto_provision_email_domain"
+                      type="text"
+                      class="input w-full mt-1"
+                      placeholder="fjdaze.com"
+                    />
+                  </div>
+
+
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
                     class="pt-4 border-t border-gray-100 dark:border-dark-700 space-y-2"
@@ -6256,6 +6269,40 @@
                 <input v-model="form.allow_user_view_error_requests" type="checkbox" />
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+
+            <!-- Usage body capture -->
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.usage_body_capture.label') }}
+                </label>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.usage_body_capture.description') }}
+                </p>
+              </div>
+              <label class="toggle">
+                <input v-model="form.usage_body_capture_enabled" type="checkbox" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div v-if="form.usage_body_capture_enabled" class="flex items-center justify-between gap-4">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.usage_body_capture.maxBytesLabel') }}
+                </label>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.usage_body_capture.maxBytesDescription') }}
+                </p>
+              </div>
+              <input
+                v-model.number="form.usage_body_capture_max_bytes"
+                type="number"
+                min="1024"
+                max="1048576"
+                step="1024"
+                class="w-36 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:text-white"
+              />
             </div>
           </div>
         </div>
@@ -9736,6 +9783,7 @@ const form = reactive<SettingsForm>({
   dingtalk_connect_internal_corp_id: "",
   dingtalk_connect_bypass_registration: false,
   dingtalk_connect_auto_provision: false,
+  dingtalk_connect_auto_provision_email_domain: "fjdaze.com",
   dingtalk_connect_sync_corp_email: false,
   dingtalk_connect_sync_display_name: false,
   dingtalk_connect_sync_dept: false,
@@ -9892,6 +9940,9 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
+  // Usage body capture（使用记录入参/返回结果捕获）
+  usage_body_capture_enabled: false,
+  usage_body_capture_max_bytes: 65536,
 });
 
 // 人机验证 UI 状态：单卡片「总开关 + 服务商单选」，落库仍是三个独立
@@ -10857,7 +10908,9 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
-    syncCaptchaProviderSelection();
+		form.dingtalk_connect_auto_provision_email_domain =
+			settings.dingtalk_connect_auto_provision_email_domain || "fjdaze.com";
+		syncCaptchaProviderSelection();
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
         defaultClaudeOAuthSystemPromptBlocks;
@@ -11352,6 +11405,8 @@ async function saveSettings() {
       dingtalk_connect_internal_corp_id: form.dingtalk_connect_internal_corp_id,
       dingtalk_connect_bypass_registration: form.dingtalk_connect_bypass_registration,
       dingtalk_connect_auto_provision: form.dingtalk_connect_auto_provision,
+      dingtalk_connect_auto_provision_email_domain:
+        form.dingtalk_connect_auto_provision_email_domain,
       dingtalk_connect_sync_corp_email: form.dingtalk_connect_sync_corp_email,
       dingtalk_connect_sync_display_name: form.dingtalk_connect_sync_display_name,
       dingtalk_connect_sync_dept: form.dingtalk_connect_sync_dept,
@@ -11575,6 +11630,8 @@ async function saveSettings() {
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,
+      usage_body_capture_enabled: form.usage_body_capture_enabled,
+      usage_body_capture_max_bytes: form.usage_body_capture_max_bytes,
     };
 
     // 仅当 openai_fast_policy_settings 已成功从后端加载时才回写，

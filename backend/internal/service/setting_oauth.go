@@ -557,6 +557,26 @@ func (s *SettingService) GetLinuxDoConnectOAuthConfig(ctx context.Context) (conf
 	return effective, nil
 }
 
+func NormalizeDingTalkAutoProvisionEmailDomain(value string) string {
+	return normalizeDingTalkAutoProvisionEmailDomain(value)
+}
+
+func normalizeDingTalkAutoProvisionEmailDomain(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" || strings.ContainsAny(value, "/:@\\") || strings.ContainsAny(value, " \t\r\n") {
+		return ""
+	}
+	if strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") || !strings.Contains(value, ".") {
+		return ""
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '.' && r != '-' {
+			return ""
+		}
+	}
+	return value
+}
+
 // GetDingTalkConnectOAuthConfig 返回用于登录的"最终生效" DingTalk Connect 配置。
 //
 // 优先级：
@@ -578,6 +598,7 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 		SettingKeyDingTalkConnectInternalCorpID,
 		SettingKeyDingTalkConnectBypassRegistration,
 		SettingKeyDingTalkConnectAutoProvision,
+		SettingKeyDingTalkConnectAutoProvisionEmailDomain,
 		SettingKeyDingTalkConnectSyncCorpEmail,
 		SettingKeyDingTalkConnectSyncDisplayName,
 		SettingKeyDingTalkConnectSyncDept,
@@ -615,6 +636,15 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 	// auto_provision 与 corp 策略解耦：任何策略下都可用于"扫码即建号直登"。
 	if v, ok := settings[SettingKeyDingTalkConnectAutoProvision]; ok && strings.TrimSpace(v) != "" {
 		effective.AutoProvision = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	if v := strings.TrimSpace(settings[SettingKeyDingTalkConnectAutoProvisionEmailDomain]); v != "" {
+		effective.AutoProvisionEmailDomain = normalizeDingTalkAutoProvisionEmailDomain(v)
+	}
+	if effective.AutoProvisionEmailDomain == "" {
+		effective.AutoProvisionEmailDomain = normalizeDingTalkAutoProvisionEmailDomain(effective.AutoProvisionEmailDomain)
+	}
+	if effective.AutoProvisionEmailDomain == "" {
+		effective.AutoProvisionEmailDomain = "fjdaze.com"
 	}
 	// bypass_registration 仅在 internal_only 模式下有意义；其它策略下强制 false，
 	// 以保证 OAuth callback 看到的 effective config 永远是一致状态。

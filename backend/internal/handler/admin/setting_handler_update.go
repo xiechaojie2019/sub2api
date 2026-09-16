@@ -82,23 +82,24 @@ type UpdateSettingsRequest struct {
 	LinuxDoConnectRedirectURL  string `json:"linuxdo_connect_redirect_url"`
 
 	// DingTalk Connect OAuth 登录
-	DingTalkConnectEnabled                 bool   `json:"dingtalk_connect_enabled"`
-	DingTalkConnectClientID                string `json:"dingtalk_connect_client_id"`
-	DingTalkConnectClientSecret            string `json:"dingtalk_connect_client_secret"`
-	DingTalkConnectRedirectURL             string `json:"dingtalk_connect_redirect_url"`
-	DingTalkConnectCorpRestrictionPolicy   string `json:"dingtalk_connect_corp_restriction_policy"`
-	DingTalkConnectInternalCorpID          string `json:"dingtalk_connect_internal_corp_id"`
-	DingTalkConnectBypassRegistration      bool   `json:"dingtalk_connect_bypass_registration"`
-	DingTalkConnectAutoProvision           bool   `json:"dingtalk_connect_auto_provision"`
-	DingTalkConnectSyncCorpEmail           bool   `json:"dingtalk_connect_sync_corp_email"`
-	DingTalkConnectSyncDisplayName         bool   `json:"dingtalk_connect_sync_display_name"`
-	DingTalkConnectSyncDept                bool   `json:"dingtalk_connect_sync_dept"`
-	DingTalkConnectSyncCorpEmailAttrKey    string `json:"dingtalk_connect_sync_corp_email_attr_key"`
-	DingTalkConnectSyncDisplayNameAttrKey  string `json:"dingtalk_connect_sync_display_name_attr_key"`
-	DingTalkConnectSyncDeptAttrKey         string `json:"dingtalk_connect_sync_dept_attr_key"`
-	DingTalkConnectSyncCorpEmailAttrName   string `json:"dingtalk_connect_sync_corp_email_attr_name"`
-	DingTalkConnectSyncDisplayNameAttrName string `json:"dingtalk_connect_sync_display_name_attr_name"`
-	DingTalkConnectSyncDeptAttrName        string `json:"dingtalk_connect_sync_dept_attr_name"`
+	DingTalkConnectEnabled                  bool   `json:"dingtalk_connect_enabled"`
+	DingTalkConnectClientID                 string `json:"dingtalk_connect_client_id"`
+	DingTalkConnectClientSecret             string `json:"dingtalk_connect_client_secret"`
+	DingTalkConnectRedirectURL              string `json:"dingtalk_connect_redirect_url"`
+	DingTalkConnectCorpRestrictionPolicy    string `json:"dingtalk_connect_corp_restriction_policy"`
+	DingTalkConnectInternalCorpID           string `json:"dingtalk_connect_internal_corp_id"`
+	DingTalkConnectBypassRegistration       bool   `json:"dingtalk_connect_bypass_registration"`
+	DingTalkConnectAutoProvision            bool   `json:"dingtalk_connect_auto_provision"`
+	DingTalkConnectAutoProvisionEmailDomain string `json:"dingtalk_connect_auto_provision_email_domain"`
+	DingTalkConnectSyncCorpEmail            bool   `json:"dingtalk_connect_sync_corp_email"`
+	DingTalkConnectSyncDisplayName          bool   `json:"dingtalk_connect_sync_display_name"`
+	DingTalkConnectSyncDept                 bool   `json:"dingtalk_connect_sync_dept"`
+	DingTalkConnectSyncCorpEmailAttrKey     string `json:"dingtalk_connect_sync_corp_email_attr_key"`
+	DingTalkConnectSyncDisplayNameAttrKey   string `json:"dingtalk_connect_sync_display_name_attr_key"`
+	DingTalkConnectSyncDeptAttrKey          string `json:"dingtalk_connect_sync_dept_attr_key"`
+	DingTalkConnectSyncCorpEmailAttrName    string `json:"dingtalk_connect_sync_corp_email_attr_name"`
+	DingTalkConnectSyncDisplayNameAttrName  string `json:"dingtalk_connect_sync_display_name_attr_name"`
+	DingTalkConnectSyncDeptAttrName         string `json:"dingtalk_connect_sync_dept_attr_name"`
 
 	// WeChat Connect OAuth 登录
 	WeChatConnectEnabled             bool   `json:"wechat_connect_enabled"`
@@ -385,6 +386,9 @@ type UpdateSettingsRequest struct {
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
 
 	AllowUserViewErrorRequests *bool `json:"allow_user_view_error_requests"`
+
+	UsageBodyCaptureEnabled  *bool `json:"usage_body_capture_enabled"`
+	UsageBodyCaptureMaxBytes *int  `json:"usage_body_capture_max_bytes"`
 }
 
 // UpdateSettings 更新系统设置
@@ -870,7 +874,17 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.DingTalkConnectRedirectURL = strings.TrimSpace(req.DingTalkConnectRedirectURL)
 		req.DingTalkConnectCorpRestrictionPolicy = strings.TrimSpace(req.DingTalkConnectCorpRestrictionPolicy)
 		req.DingTalkConnectInternalCorpID = strings.TrimSpace(req.DingTalkConnectInternalCorpID)
+	}
+	req.DingTalkConnectAutoProvisionEmailDomain = strings.TrimSpace(strings.ToLower(req.DingTalkConnectAutoProvisionEmailDomain))
+	if req.DingTalkConnectAutoProvisionEmailDomain == "" {
+		req.DingTalkConnectAutoProvisionEmailDomain = "fjdaze.com"
+	}
+	if service.NormalizeDingTalkAutoProvisionEmailDomain(req.DingTalkConnectAutoProvisionEmailDomain) == "" {
+		response.BadRequest(c, "DingTalk auto-provision email domain is invalid")
+		return
+	}
 
+	if req.DingTalkConnectEnabled {
 		if req.DingTalkConnectClientID == "" {
 			response.BadRequest(c, "DingTalk Client ID is required when enabled")
 			return
@@ -896,16 +910,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		// Corp 策略校验（V1/V4 fail-closed）
 		dingTalkCfg := config.DingTalkConnectConfig{
 			Enabled:               true,
-			DingTalkAppKind:       "internal_app", // 硬编码：settings 层仅支持 internal_app
-			AppType:               "internal",     // 对于 internal_only 策略的默认值
+			DingTalkAppKind:       "internal_app",
+			AppType:               "internal",
 			CorpRestrictionPolicy: req.DingTalkConnectCorpRestrictionPolicy,
 			InternalCorpID:        req.DingTalkConnectInternalCorpID,
 		}
-		// 若未填 corp_restriction_policy，保留已有配置
 		if dingTalkCfg.CorpRestrictionPolicy == "" {
 			dingTalkCfg.CorpRestrictionPolicy = previousSettings.DingTalkConnectCorpRestrictionPolicy
 		}
-		// 对于 internal_only 策略，app_type 必须为 internal（V1 校验）
 		if dingTalkCfg.CorpRestrictionPolicy == "internal_only" {
 			dingTalkCfg.AppType = "internal"
 		} else {
@@ -1549,116 +1561,129 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.APIKeyACLTrustForwardedIP
 		}(),
-		ForwardedClientIPHeaders:               forwardedClientIPHeaders,
-		LinuxDoConnectEnabled:                  req.LinuxDoConnectEnabled,
-		LinuxDoConnectClientID:                 req.LinuxDoConnectClientID,
-		LinuxDoConnectClientSecret:             req.LinuxDoConnectClientSecret,
-		LinuxDoConnectRedirectURL:              req.LinuxDoConnectRedirectURL,
-		DingTalkConnectEnabled:                 req.DingTalkConnectEnabled,
-		DingTalkConnectClientID:                req.DingTalkConnectClientID,
-		DingTalkConnectClientSecret:            req.DingTalkConnectClientSecret,
-		DingTalkConnectRedirectURL:             req.DingTalkConnectRedirectURL,
-		DingTalkConnectCorpRestrictionPolicy:   req.DingTalkConnectCorpRestrictionPolicy,
-		DingTalkConnectInternalCorpID:          req.DingTalkConnectInternalCorpID,
-		DingTalkConnectBypassRegistration:      req.DingTalkConnectBypassRegistration,
-		DingTalkConnectAutoProvision:           req.DingTalkConnectAutoProvision,
-		DingTalkConnectSyncCorpEmail:           req.DingTalkConnectSyncCorpEmail,
-		DingTalkConnectSyncDisplayName:         req.DingTalkConnectSyncDisplayName,
-		DingTalkConnectSyncDept:                req.DingTalkConnectSyncDept,
-		DingTalkConnectSyncCorpEmailAttrKey:    req.DingTalkConnectSyncCorpEmailAttrKey,
-		DingTalkConnectSyncDisplayNameAttrKey:  req.DingTalkConnectSyncDisplayNameAttrKey,
-		DingTalkConnectSyncDeptAttrKey:         req.DingTalkConnectSyncDeptAttrKey,
-		DingTalkConnectSyncCorpEmailAttrName:   req.DingTalkConnectSyncCorpEmailAttrName,
-		DingTalkConnectSyncDisplayNameAttrName: req.DingTalkConnectSyncDisplayNameAttrName,
-		DingTalkConnectSyncDeptAttrName:        req.DingTalkConnectSyncDeptAttrName,
-		WeChatConnectEnabled:                   req.WeChatConnectEnabled,
-		WeChatConnectAppID:                     req.WeChatConnectAppID,
-		WeChatConnectAppSecret:                 req.WeChatConnectAppSecret,
-		WeChatConnectOpenAppID:                 req.WeChatConnectOpenAppID,
-		WeChatConnectOpenAppSecret:             req.WeChatConnectOpenAppSecret,
-		WeChatConnectMPAppID:                   req.WeChatConnectMPAppID,
-		WeChatConnectMPAppSecret:               req.WeChatConnectMPAppSecret,
-		WeChatConnectMobileAppID:               req.WeChatConnectMobileAppID,
-		WeChatConnectMobileAppSecret:           req.WeChatConnectMobileAppSecret,
-		WeChatConnectOpenEnabled:               req.WeChatConnectOpenEnabled,
-		WeChatConnectMPEnabled:                 req.WeChatConnectMPEnabled,
-		WeChatConnectMobileEnabled:             req.WeChatConnectMobileEnabled,
-		WeChatConnectMode:                      req.WeChatConnectMode,
-		WeChatConnectScopes:                    req.WeChatConnectScopes,
-		WeChatConnectRedirectURL:               req.WeChatConnectRedirectURL,
-		WeChatConnectFrontendRedirectURL:       req.WeChatConnectFrontendRedirectURL,
-		OIDCConnectEnabled:                     req.OIDCConnectEnabled,
-		OIDCConnectProviderName:                req.OIDCConnectProviderName,
-		OIDCConnectClientID:                    req.OIDCConnectClientID,
-		OIDCConnectClientSecret:                req.OIDCConnectClientSecret,
-		OIDCConnectIssuerURL:                   req.OIDCConnectIssuerURL,
-		OIDCConnectDiscoveryURL:                req.OIDCConnectDiscoveryURL,
-		OIDCConnectAuthorizeURL:                req.OIDCConnectAuthorizeURL,
-		OIDCConnectTokenURL:                    req.OIDCConnectTokenURL,
-		OIDCConnectUserInfoURL:                 req.OIDCConnectUserInfoURL,
-		OIDCConnectJWKSURL:                     req.OIDCConnectJWKSURL,
-		OIDCConnectScopes:                      req.OIDCConnectScopes,
-		OIDCConnectRedirectURL:                 req.OIDCConnectRedirectURL,
-		OIDCConnectFrontendRedirectURL:         req.OIDCConnectFrontendRedirectURL,
-		OIDCConnectTokenAuthMethod:             req.OIDCConnectTokenAuthMethod,
-		OIDCConnectUsePKCE:                     oidcUsePKCE,
-		OIDCConnectValidateIDToken:             oidcValidateIDToken,
-		OIDCConnectAllowedSigningAlgs:          req.OIDCConnectAllowedSigningAlgs,
-		OIDCConnectClockSkewSeconds:            req.OIDCConnectClockSkewSeconds,
-		OIDCConnectRequireEmailVerified:        req.OIDCConnectRequireEmailVerified,
-		OIDCConnectUserInfoEmailPath:           req.OIDCConnectUserInfoEmailPath,
-		OIDCConnectUserInfoIDPath:              req.OIDCConnectUserInfoIDPath,
-		OIDCConnectUserInfoUsernamePath:        req.OIDCConnectUserInfoUsernamePath,
-		GitHubOAuthEnabled:                     req.GitHubOAuthEnabled,
-		GitHubOAuthClientID:                    req.GitHubOAuthClientID,
-		GitHubOAuthClientSecret:                req.GitHubOAuthClientSecret,
-		GitHubOAuthRedirectURL:                 req.GitHubOAuthRedirectURL,
-		GitHubOAuthFrontendRedirectURL:         req.GitHubOAuthFrontendRedirectURL,
-		GoogleOAuthEnabled:                     req.GoogleOAuthEnabled,
-		GoogleOAuthClientID:                    req.GoogleOAuthClientID,
-		GoogleOAuthClientSecret:                req.GoogleOAuthClientSecret,
-		GoogleOAuthRedirectURL:                 req.GoogleOAuthRedirectURL,
-		GoogleOAuthFrontendRedirectURL:         req.GoogleOAuthFrontendRedirectURL,
-		SiteName:                               req.SiteName,
-		SiteLogo:                               req.SiteLogo,
-		SiteSubtitle:                           req.SiteSubtitle,
-		APIBaseURL:                             req.APIBaseURL,
-		ContactInfo:                            req.ContactInfo,
-		DocURL:                                 req.DocURL,
-		HomeContent:                            req.HomeContent,
-		CompactHomeEnabled:                     req.CompactHomeEnabled,
-		HideCcsImportButton:                    req.HideCcsImportButton,
-		PurchaseSubscriptionEnabled:            purchaseEnabled,
-		PurchaseSubscriptionURL:                purchaseURL,
-		TableDefaultPageSize:                   req.TableDefaultPageSize,
-		TablePageSizeOptions:                   req.TablePageSizeOptions,
-		CustomMenuItems:                        customMenuJSON,
-		CustomEndpoints:                        customEndpointsJSON,
-		DefaultConcurrency:                     req.DefaultConcurrency,
-		DefaultBalance:                         req.DefaultBalance,
-		AffiliateRebateRate:                    affiliateRebateRate,
-		AffiliateRebateFreezeHours:             affiliateRebateFreezeHours,
-		AffiliateRebateDurationDays:            affiliateRebateDurationDays,
-		AffiliateRebatePerInviteeCap:           affiliateRebatePerInviteeCap,
-		AdminRechargeRebateEnabled:             adminRechargeRebateEnabled,
-		DefaultUserRPMLimit:                    req.DefaultUserRPMLimit,
-		DefaultSubscriptions:                   defaultSubscriptions,
-		EnableModelFallback:                    req.EnableModelFallback,
-		FallbackModelAnthropic:                 req.FallbackModelAnthropic,
-		FallbackModelOpenAI:                    req.FallbackModelOpenAI,
-		FallbackModelGemini:                    req.FallbackModelGemini,
-		FallbackModelAntigravity:               req.FallbackModelAntigravity,
-		EnableIdentityPatch:                    req.EnableIdentityPatch,
-		IdentityPatchPrompt:                    req.IdentityPatchPrompt,
-		MinClaudeCodeVersion:                   req.MinClaudeCodeVersion,
-		MaxClaudeCodeVersion:                   req.MaxClaudeCodeVersion,
-		AllowUngroupedKeyScheduling:            req.AllowUngroupedKeyScheduling,
-		BackendModeEnabled:                     req.BackendModeEnabled,
+		ForwardedClientIPHeaders:                forwardedClientIPHeaders,
+		LinuxDoConnectEnabled:                   req.LinuxDoConnectEnabled,
+		LinuxDoConnectClientID:                  req.LinuxDoConnectClientID,
+		LinuxDoConnectClientSecret:              req.LinuxDoConnectClientSecret,
+		LinuxDoConnectRedirectURL:               req.LinuxDoConnectRedirectURL,
+		DingTalkConnectEnabled:                  req.DingTalkConnectEnabled,
+		DingTalkConnectClientID:                 req.DingTalkConnectClientID,
+		DingTalkConnectClientSecret:             req.DingTalkConnectClientSecret,
+		DingTalkConnectRedirectURL:              req.DingTalkConnectRedirectURL,
+		DingTalkConnectCorpRestrictionPolicy:    req.DingTalkConnectCorpRestrictionPolicy,
+		DingTalkConnectInternalCorpID:           req.DingTalkConnectInternalCorpID,
+		DingTalkConnectBypassRegistration:       req.DingTalkConnectBypassRegistration,
+		DingTalkConnectAutoProvision:            req.DingTalkConnectAutoProvision,
+		DingTalkConnectAutoProvisionEmailDomain: req.DingTalkConnectAutoProvisionEmailDomain,
+		DingTalkConnectSyncCorpEmail:            req.DingTalkConnectSyncCorpEmail,
+		DingTalkConnectSyncDisplayName:          req.DingTalkConnectSyncDisplayName,
+		DingTalkConnectSyncDept:                 req.DingTalkConnectSyncDept,
+		DingTalkConnectSyncCorpEmailAttrKey:     req.DingTalkConnectSyncCorpEmailAttrKey,
+		DingTalkConnectSyncDisplayNameAttrKey:   req.DingTalkConnectSyncDisplayNameAttrKey,
+		DingTalkConnectSyncDeptAttrKey:          req.DingTalkConnectSyncDeptAttrKey,
+		DingTalkConnectSyncCorpEmailAttrName:    req.DingTalkConnectSyncCorpEmailAttrName,
+		DingTalkConnectSyncDisplayNameAttrName:  req.DingTalkConnectSyncDisplayNameAttrName,
+		DingTalkConnectSyncDeptAttrName:         req.DingTalkConnectSyncDeptAttrName,
+		WeChatConnectEnabled:                    req.WeChatConnectEnabled,
+		WeChatConnectAppID:                      req.WeChatConnectAppID,
+		WeChatConnectAppSecret:                  req.WeChatConnectAppSecret,
+		WeChatConnectOpenAppID:                  req.WeChatConnectOpenAppID,
+		WeChatConnectOpenAppSecret:              req.WeChatConnectOpenAppSecret,
+		WeChatConnectMPAppID:                    req.WeChatConnectMPAppID,
+		WeChatConnectMPAppSecret:                req.WeChatConnectMPAppSecret,
+		WeChatConnectMobileAppID:                req.WeChatConnectMobileAppID,
+		WeChatConnectMobileAppSecret:            req.WeChatConnectMobileAppSecret,
+		WeChatConnectOpenEnabled:                req.WeChatConnectOpenEnabled,
+		WeChatConnectMPEnabled:                  req.WeChatConnectMPEnabled,
+		WeChatConnectMobileEnabled:              req.WeChatConnectMobileEnabled,
+		WeChatConnectMode:                       req.WeChatConnectMode,
+		WeChatConnectScopes:                     req.WeChatConnectScopes,
+		WeChatConnectRedirectURL:                req.WeChatConnectRedirectURL,
+		WeChatConnectFrontendRedirectURL:        req.WeChatConnectFrontendRedirectURL,
+		OIDCConnectEnabled:                      req.OIDCConnectEnabled,
+		OIDCConnectProviderName:                 req.OIDCConnectProviderName,
+		OIDCConnectClientID:                     req.OIDCConnectClientID,
+		OIDCConnectClientSecret:                 req.OIDCConnectClientSecret,
+		OIDCConnectIssuerURL:                    req.OIDCConnectIssuerURL,
+		OIDCConnectDiscoveryURL:                 req.OIDCConnectDiscoveryURL,
+		OIDCConnectAuthorizeURL:                 req.OIDCConnectAuthorizeURL,
+		OIDCConnectTokenURL:                     req.OIDCConnectTokenURL,
+		OIDCConnectUserInfoURL:                  req.OIDCConnectUserInfoURL,
+		OIDCConnectJWKSURL:                      req.OIDCConnectJWKSURL,
+		OIDCConnectScopes:                       req.OIDCConnectScopes,
+		OIDCConnectRedirectURL:                  req.OIDCConnectRedirectURL,
+		OIDCConnectFrontendRedirectURL:          req.OIDCConnectFrontendRedirectURL,
+		OIDCConnectTokenAuthMethod:              req.OIDCConnectTokenAuthMethod,
+		OIDCConnectUsePKCE:                      oidcUsePKCE,
+		OIDCConnectValidateIDToken:              oidcValidateIDToken,
+		OIDCConnectAllowedSigningAlgs:           req.OIDCConnectAllowedSigningAlgs,
+		OIDCConnectClockSkewSeconds:             req.OIDCConnectClockSkewSeconds,
+		OIDCConnectRequireEmailVerified:         req.OIDCConnectRequireEmailVerified,
+		OIDCConnectUserInfoEmailPath:            req.OIDCConnectUserInfoEmailPath,
+		OIDCConnectUserInfoIDPath:               req.OIDCConnectUserInfoIDPath,
+		OIDCConnectUserInfoUsernamePath:         req.OIDCConnectUserInfoUsernamePath,
+		GitHubOAuthEnabled:                      req.GitHubOAuthEnabled,
+		GitHubOAuthClientID:                     req.GitHubOAuthClientID,
+		GitHubOAuthClientSecret:                 req.GitHubOAuthClientSecret,
+		GitHubOAuthRedirectURL:                  req.GitHubOAuthRedirectURL,
+		GitHubOAuthFrontendRedirectURL:          req.GitHubOAuthFrontendRedirectURL,
+		GoogleOAuthEnabled:                      req.GoogleOAuthEnabled,
+		GoogleOAuthClientID:                     req.GoogleOAuthClientID,
+		GoogleOAuthClientSecret:                 req.GoogleOAuthClientSecret,
+		GoogleOAuthRedirectURL:                  req.GoogleOAuthRedirectURL,
+		GoogleOAuthFrontendRedirectURL:          req.GoogleOAuthFrontendRedirectURL,
+		SiteName:                                req.SiteName,
+		SiteLogo:                                req.SiteLogo,
+		SiteSubtitle:                            req.SiteSubtitle,
+		APIBaseURL:                              req.APIBaseURL,
+		ContactInfo:                             req.ContactInfo,
+		DocURL:                                  req.DocURL,
+		HomeContent:                             req.HomeContent,
+		CompactHomeEnabled:                      req.CompactHomeEnabled,
+		HideCcsImportButton:                     req.HideCcsImportButton,
+		PurchaseSubscriptionEnabled:             purchaseEnabled,
+		PurchaseSubscriptionURL:                 purchaseURL,
+		TableDefaultPageSize:                    req.TableDefaultPageSize,
+		TablePageSizeOptions:                    req.TablePageSizeOptions,
+		CustomMenuItems:                         customMenuJSON,
+		CustomEndpoints:                         customEndpointsJSON,
+		DefaultConcurrency:                      req.DefaultConcurrency,
+		DefaultBalance:                          req.DefaultBalance,
+		AffiliateRebateRate:                     affiliateRebateRate,
+		AffiliateRebateFreezeHours:              affiliateRebateFreezeHours,
+		AffiliateRebateDurationDays:             affiliateRebateDurationDays,
+		AffiliateRebatePerInviteeCap:            affiliateRebatePerInviteeCap,
+		AdminRechargeRebateEnabled:              adminRechargeRebateEnabled,
+		DefaultUserRPMLimit:                     req.DefaultUserRPMLimit,
+		DefaultSubscriptions:                    defaultSubscriptions,
+		EnableModelFallback:                     req.EnableModelFallback,
+		FallbackModelAnthropic:                  req.FallbackModelAnthropic,
+		FallbackModelOpenAI:                     req.FallbackModelOpenAI,
+		FallbackModelGemini:                     req.FallbackModelGemini,
+		FallbackModelAntigravity:                req.FallbackModelAntigravity,
+		EnableIdentityPatch:                     req.EnableIdentityPatch,
+		IdentityPatchPrompt:                     req.IdentityPatchPrompt,
+		MinClaudeCodeVersion:                    req.MinClaudeCodeVersion,
+		MaxClaudeCodeVersion:                    req.MaxClaudeCodeVersion,
+		AllowUngroupedKeyScheduling:             req.AllowUngroupedKeyScheduling,
+		BackendModeEnabled:                      req.BackendModeEnabled,
 		AllowUserViewErrorRequests: func() bool {
 			if req.AllowUserViewErrorRequests != nil {
 				return *req.AllowUserViewErrorRequests
 			}
 			return previousSettings.AllowUserViewErrorRequests
+		}(),
+		UsageBodyCaptureEnabled: func() bool {
+			if req.UsageBodyCaptureEnabled != nil {
+				return *req.UsageBodyCaptureEnabled
+			}
+			return previousSettings.UsageBodyCaptureEnabled
+		}(),
+		UsageBodyCaptureMaxBytes: func() int {
+			if req.UsageBodyCaptureMaxBytes != nil {
+				return *req.UsageBodyCaptureMaxBytes
+			}
+			return previousSettings.UsageBodyCaptureMaxBytes
 		}(),
 		OpsMonitoringEnabled: func() bool {
 			if req.OpsMonitoringEnabled != nil {
@@ -2203,6 +2228,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectInternalCorpID:                          updatedSettings.DingTalkConnectInternalCorpID,
 		DingTalkConnectBypassRegistration:                      updatedSettings.DingTalkConnectBypassRegistration,
 		DingTalkConnectAutoProvision:                           updatedSettings.DingTalkConnectAutoProvision,
+		DingTalkConnectAutoProvisionEmailDomain:                updatedSettings.DingTalkConnectAutoProvisionEmailDomain,
 		DingTalkConnectSyncCorpEmail:                           updatedSettings.DingTalkConnectSyncCorpEmail,
 		DingTalkConnectSyncDisplayName:                         updatedSettings.DingTalkConnectSyncDisplayName,
 		DingTalkConnectSyncDept:                                updatedSettings.DingTalkConnectSyncDept,
@@ -2406,6 +2432,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CyberSessionBlockTTLSeconds: updatedSettings.CyberSessionBlockTTLSeconds,
 		AccountSchedulingThresholds: updatedSettings.AccountSchedulingThresholds,
 		AllowUserViewErrorRequests:  updatedSettings.AllowUserViewErrorRequests,
+
+		UsageBodyCaptureEnabled:  updatedSettings.UsageBodyCaptureEnabled,
+		UsageBodyCaptureMaxBytes: updatedSettings.UsageBodyCaptureMaxBytes,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

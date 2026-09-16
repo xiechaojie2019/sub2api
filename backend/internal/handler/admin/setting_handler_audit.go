@@ -188,6 +188,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.DingTalkConnectAutoProvision != after.DingTalkConnectAutoProvision {
 		changed = append(changed, "dingtalk_connect_auto_provision")
 	}
+	if before.DingTalkConnectAutoProvisionEmailDomain != after.DingTalkConnectAutoProvisionEmailDomain {
+		changed = append(changed, "dingtalk_connect_auto_provision_email_domain")
+	}
 	if before.DingTalkConnectSyncCorpEmail != after.DingTalkConnectSyncCorpEmail {
 		changed = append(changed, "dingtalk_connect_sync_corp_email")
 	}
