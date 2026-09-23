@@ -1530,11 +1530,13 @@ async function handleSubmit() {
     }
   }
 
-  // 校验 per_request/image 模式必须有价格 (只校验启用的平台)
+  // 按次、图片和视频模式必须有价格（或至少一个价格区间）。
+  // 视频接口使用 OpenAI 兼容格式，但仍按 video 模式走渠道价卡；
+  // 若这里漏掉 video，前端会在保存前错误地放行空价卡，导致请求落到零价。
   for (const section of form.platforms.filter(s => s.enabled)) {
     for (const entry of section.model_pricing) {
       if (entry.models.length === 0) continue
-      if ((entry.billing_mode === 'per_request' || entry.billing_mode === 'image') &&
+      if ((entry.billing_mode === 'per_request' || entry.billing_mode === 'image' || entry.billing_mode === 'video') &&
           (entry.per_request_price == null || entry.per_request_price === '') &&
           (!entry.intervals || entry.intervals.length === 0)) {
         appStore.showError(t('admin.channels.form.perRequestPriceRequired'))

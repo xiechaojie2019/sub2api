@@ -2474,6 +2474,26 @@ func TestValidatePricingBillingMode(t *testing.T) {
 			}},
 		},
 		{
+			name: "video with price - valid",
+			pricing: []ChannelModelPricing{{
+				BillingMode:     BillingModeVideo,
+				PerRequestPrice: testPtrFloat64(0.08),
+			}},
+		},
+		{
+			name: "video with intervals - valid",
+			pricing: []ChannelModelPricing{{
+				BillingMode: BillingModeVideo,
+				Intervals:   []PricingInterval{{MinTokens: 0, MaxTokens: testPtrInt(1000), PerRequestPrice: testPtrFloat64(0.08)}},
+			}},
+		},
+		{
+			name:    "video no price no intervals - invalid",
+			pricing: []ChannelModelPricing{{BillingMode: BillingModeVideo}},
+			wantErr: true,
+			errMsg:  "per-request price or intervals required",
+		},
+		{
 			name:    "per_request no price no intervals - invalid",
 			pricing: []ChannelModelPricing{{BillingMode: BillingModePerRequest}},
 			wantErr: true,
